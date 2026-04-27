@@ -3,17 +3,15 @@
 
 import * as Tone from "tone";
 
-let synthReady = false;
-let synth: Tone.Synth;
+let startPromise: Promise<void> | null = null;
+const synth = new Tone.Synth({
+  oscillator: { type: "square" },
+  envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.2 },
+}).toDestination();
 
 async function ensureSynth() {
-  if (synthReady) return;
-  await Tone.start();
-  synth = new Tone.Synth({
-    oscillator: { type: "square" },
-    envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.2 },
-  }).toDestination();
-  synthReady = true;
+  if (!startPromise) startPromise = Tone.start();
+  await startPromise;
 }
 
 export async function playHandshakeSweep(): Promise<void> {
@@ -24,7 +22,7 @@ export async function playHandshakeSweep(): Promise<void> {
   }).toDestination();
   sweep.start();
   sweep.frequency.rampTo(2000, 1.2);
-  setTimeout(() => sweep.stop(), 1400);
+  setTimeout(() => { sweep.stop(); sweep.dispose(); }, 1400);
 }
 
 export async function playChirp(msgType: string): Promise<void> {
