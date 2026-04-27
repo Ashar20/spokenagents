@@ -55,6 +55,8 @@ async def run_negotiation(
     audio_emitter: optional AudioEventEmitter instance. If None, events are only logged.
     """
     session_id = str(uuid.uuid4())[:8]
+    t_start = time.perf_counter()
+    timings: dict[str, float] = {}
 
     async def emit(event: str, data: Optional[dict] = None) -> None:
         logger.info("[session %s] event: %s %s", session_id, event, data or "")
@@ -70,12 +72,14 @@ async def run_negotiation(
         logger.error("ENS resolution failed: %s", exc)
         return NegotiationResult(success=False, error=f"ENS resolution failed: {exc}")
 
+    timings["ens_resolve"] = time.perf_counter() - t_start
     await emit("ens_resolved", {
         "name": callee_ens,
         "axl_node": record.axl_node,
         "toll_price": record.toll_price,
+        "elapsed_s": round(timings["ens_resolve"], 3),
     })
-    logger.info("ENS resolved: axl_node=%s toll=%s %s", record.axl_node, record.toll_price, record.currency)
+    logger.info("ENS resolved in %.2fs: axl_node=%s toll=%s %s", timings["ens_resolve"], record.axl_node, record.toll_price, record.currency)
 
     # --- Phase 1: Toll payment ---
     logger.info("Paying toll: %s %s to workflow %s", record.toll_price, record.currency, record.workflow_id)
@@ -100,8 +104,9 @@ async def run_negotiation(
             error=f"Toll receipt not confirmed: status={toll_receipt.status}",
         )
 
-    await emit("toll_paid", {"tx_hash": toll_receipt.tx_hash, "status": toll_receipt.status})
-    logger.info("Toll paid: tx=%s", toll_receipt.tx_hash)
+    timings["toll_payment"] = time.perf_counter() - t_start - timings["ens_resolve"]
+    await emit("toll_paid", {"tx_hash": toll_receipt.tx_hash, "status": toll_receipt.status, "elapsed_s": round(timings["toll_payment"], 3)})
+    logger.info("Toll paid in %.2fs: tx=%s", timings["toll_payment"], toll_receipt.tx_hash)
 
     # --- Phase 2: AXL channel open + negotiation ---
     bridge_url = os.environ.get("ALEX_AXL_NODE", "http://127.0.0.1:9002")
@@ -142,6 +147,9 @@ async def run_negotiation(
         await emit("chirp", {"msg_type": "CONFIRM"})
         logger.info("AXL CONFIRM sent: slot=%s", slot_id)
 
+    timings["axl_negotiation"] = time.perf_counter() - t_start - timings["ens_resolve"] - timings["toll_payment"]
+    logger.info("AXL negotiation done in %.2fs", timings["axl_negotiation"])
+
     # --- Phase 3: Settlement ---
     logger.info("Executing settlement: slot=%s deposit=%s", slot_id, deposit)
     await emit("settlement_executing", {"slot_id": slot_id, "deposit": deposit})
@@ -160,7 +168,16 @@ async def run_negotiation(
             toll_receipt=toll_receipt,
         )
 
+    timings["settlement"] = time.perf_counter() - t_start - timings["ens_resolve"] - timings["toll_payment"] - timings["axl_negotiation"]
+    timings["total"] = time.perf_counter() - t_start
+    logger.info(
+        "Timing: ens=%.2fs toll=%.2fs axl=%.2fs settle=%.2fs total=%.2fs",
+        timings["ens_resolve"], timings["toll_payment"],
+        timings["axl_negotiation"], timings["settlement"], timings["total"],
+    )
+
     await emit("settlement_done", {"tx_hash": settlement.tx_hash})
+    await emit("timing", {k: round(v, 3) for k, v in timings.items()})
     logger.info("Settlement done: tx=%s", settlement.tx_hash)
 
     await keeperhub.aclose()
@@ -172,4 +189,5 @@ async def run_negotiation(
         terms_hash=terms_hash,
         toll_receipt=toll_receipt,
         settlement_receipt=settlement,
+        timings=timings,
     )
