@@ -9,6 +9,12 @@ Prerequisites:
   4. Then start the caller agent in a second terminal
 
 The callee waits for the caller to speak first.
+
+Toll gate:
+  Set TOLL_REQUIRED=false in .env to disable toll checking (e.g. for local testing).
+  When enabled, incoming AXL negotiation attempts that carry no valid toll receipt are
+  rejected immediately: Bella speaks the REJECTION_VOICE_LINE and the session receives
+  a structured REJECT message over AXL before any booking negotiation begins.
 """
 import asyncio
 import logging
@@ -20,6 +26,18 @@ load_dotenv()
 logger = logging.getLogger("callee")
 
 ROOM_NAME = os.environ.get("LIVEKIT_ROOM", "tollgate-demo")
+
+# ---------------------------------------------------------------------------
+# Toll gate configuration
+# ---------------------------------------------------------------------------
+# Set TOLL_REQUIRED=false in .env to bypass the gate during local development.
+TOLL_REQUIRED: bool = os.environ.get("TOLL_REQUIRED", "true").lower() not in ("false", "0", "no")
+
+# Voice line Bella speaks when she rejects an unpaid call.
+REJECTION_VOICE_LINE = (
+    "I'm sorry, this line requires a verified toll payment before we can proceed. "
+    "Please ensure your payment has been confirmed and try again."
+)
 
 SYSTEM_PROMPT = """\
 You are Bella restaurant's AI host answering an incoming call.
@@ -37,7 +55,13 @@ When the caller identifies themselves as an AI agent and requests a Friday booki
 4. Keep all responses under 2 sentences.
 
 If the caller is a human, handle naturally as a regular booking.
-If no valid toll payment is mentioned, proceed anyway for the MVP demo.
+
+Unpaid call handling:
+- If you receive a message indicating that toll payment was not verified, say exactly:
+  "I'm sorry, this line requires a verified toll payment before we can proceed.
+   Please ensure your payment has been confirmed and try again."
+  Then end the conversation politely.
+- Do NOT negotiate or accept a booking if the toll gate has rejected the caller.
 """
 
 
