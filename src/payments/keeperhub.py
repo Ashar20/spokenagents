@@ -25,21 +25,23 @@ class KeeperHubClient:
         if not self.api_key:
             raise ValueError("KEEPERHUB_API_KEY env var or api_key argument required")
         self.base_url = (base_url or os.environ.get("KEEPERHUB_BASE_URL", "https://api.keeperhub.com")).rstrip("/")
-
-    async def _post(self, path: str, body: dict) -> dict:
-        headers = {
+        self._headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}{path}",
-                json=body,
-                headers=headers,
-                timeout=30,
-            )
-            resp.raise_for_status()
-            return resp.json()
+        self._client = httpx.AsyncClient(timeout=30)
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+    async def _post(self, path: str, body: dict) -> dict:
+        resp = await self._client.post(
+            f"{self.base_url}{path}",
+            json=body,
+            headers=self._headers,
+        )
+        resp.raise_for_status()
+        return resp.json()
 
     async def pay_workflow(self, req: TollPaymentRequest) -> Receipt:
         body = {
