@@ -1,8 +1,11 @@
 # src/ens/resolver.py
 import json
+import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
-import os
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class AgentRecord:
@@ -33,7 +36,9 @@ def _parse_text_records(raw: dict) -> AgentRecord:
 async def resolve_agent_records(ens_name: str, rpc_url: Optional[str] = None) -> AgentRecord:
     from web3 import AsyncWeb3
 
-    url = rpc_url or os.environ["RPC_URL"]
+    url = rpc_url or os.environ.get("RPC_URL")
+    if not url:
+        raise ValueError("rpc_url argument or RPC_URL env var required")
     w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(url))
     TEXT_KEYS = [
         "axl.node", "contact.price", "contact.currency",
@@ -45,6 +50,6 @@ async def resolve_agent_records(ens_name: str, rpc_url: Optional[str] = None) ->
             value = await w3.ens.get_text(ens_name, key)
             if value:
                 raw[key] = value
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("ENS text lookup failed for %s[%s]: %s", ens_name, key, exc)
     return _parse_text_records(raw)
