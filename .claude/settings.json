@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init *)",
+      "Bash(python3 -m venv .venv)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python -c \"import httpx; import dotenv; print\\('deps OK'\\)\")",
+      "Bash(curl -s https://raw.githubusercontent.com/gensyn-ai/axl/main/docs/integrations.md)",
+      "Bash(pip install *)",
+      "Bash(npm --version)",
+      "Bash(.venv/bin/python -m pytest tests/test_toll_gate.py -v)",
+      "Bash(.venv/bin/python -m pytest tests/ -v)"
+    ]
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
+  }
+}

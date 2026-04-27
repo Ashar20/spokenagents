@@ -14,8 +14,9 @@ Audio events are emitted at each step for the demo UI.
 import asyncio
 import logging
 import os
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from src.ens.resolver import AgentRecord, resolve_agent_records
@@ -36,6 +37,7 @@ class NegotiationResult:
     toll_receipt: Optional[Receipt] = None
     settlement_receipt: Optional[Receipt] = None
     error: str = ""
+    timings: dict = field(default_factory=dict)
 
 
 async def run_negotiation(

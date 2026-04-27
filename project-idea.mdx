@@ -1,0 +1,348 @@
+# Tollgate
+
+*(working name — alternatives: Dialtone, Ringback, Turnstile)*
+
+**Stripe for agent-to-agent calls.** A paid-inbound layer for AI agents: to open a communication channel with another agent, the caller's agent pays a toll. Payment executes on-chain via KeeperHub (x402). The negotiation itself happens over Gensyn's AXL. Each agent's identity, price, and capabilities are published on ENS.
+
+---
+
+## 1. The problem we're betting on
+
+Every business is about to have a voice agent. The moment that's true, agent-to-agent spam becomes the next robocall crisis. Any agent can call any agent, for free, at arbitrary scale — and LLM-generated calls are cheaper to send than to listen to.
+
+There is currently no equivalent of postage, rate-limiting, or Stripe-for-agents to regulate inbound. We're building it.
+
+**One-line pitch:** *To reach an agent, another agent has to pay. We make the toll booth.*
+
+---
+
+## 2. How it works (end-to-end)
+
+1. **Human-to-agent (voice).** Alex tells his voice agent: *"Book me a table at Bella for Friday, party of 4."*
+2. **Discovery.** Alex's agent resolves `bella.eth` via ENS. Text records expose Bella's AXL node, toll price, accepted payment methods, and capability list.
+3. **Voice call placed.** Alex's agent dials the restaurant. Bella's voice agent answers. Both sides detect they are agent-to-agent (short audio watermark or explicit ID exchange).
+4. **Toll paid.** Alex's agent invokes KeeperHub's MCP server to pay the inbound toll in USDC via x402. KeeperHub handles the tx: retries, gas optimization, MEV-protected routing, full audit trail.
+5. **AXL channel opens.** Bella's agent verifies the toll receipt, and both AXL nodes connect. The humans listening on the voice line hear a **short modem-handshake sweep** — the audible signature of the mode switch.
+6. **Negotiation.** Agents exchange structured messages over AXL (proposed slot → counter-proposal → accept → terms). On the voice line, synchronized R2-D2-style chirps play so the humans know something is happening. Sub-second exchange.
+7. **Settlement.** Once terms are agreed, KeeperHub executes the final transaction — deposit, escrow, or signed commitment. Both sides receive audit trails.
+8. **Report back.** Both agents drop back to voice and summarize to their humans: *"Table held for Friday 8pm, $20 deposit paid, confirmation #A4F2."*
+
+The whole thing happens in roughly 30 seconds end-to-end.
+
+---
+
+## 3. Architecture
+
+```
+  Alex                                                   Bella
+   |                                                       |
+   |──voice──▶️ [Alex's Agent] ◀️───voice call───▶️ [Bella's Agent] ◀️──voice──|
+                    │                                  │
+                    │ ENS lookup: bella.eth            │
+                    ├──▶️ [ENS]                         │
+                    │     returns: AXL node,           │
+                    │     toll price, workflow id      │
+                    │                                  │
+                    │ toll payment (x402)              │
+                    ├──▶️ [KeeperHub MCP]               │
+                    │     retry / gas / MEV / audit    │
+                    │     USDC tx ────────────────────▶️│ (receipt verified)
+                    │                                  │
+                    │◀️══════ AXL channel opens ═══════▶️│
+                    │        (encrypted, P2P,          │
+                    │         no central broker)       │
+                    │                                  │
+                    │     structured negotiation       │
+                    │◀️════════════════════════════════▶️│
+                    │                                  │
+                    │ final settlement                 │
+                    ├──▶️ [KeeperHub MCP]               │
+                    │     executes deposit /           │
+                    │     escrow / signed commit       │
+                    │                                  │
+                    │     receipts + audit log         │
+                    ▼                                  ▼
+```
+
+---
+
+## 4. The handshake protocol
+
+The bytes and their order. Names marked TBD should be confirmed against live sponsor docs during kickoff.
+
+### Phase 0 — Discovery (out-of-band)
+The caller already knows the callee's identifier (an ENS name like `bella.eth` or a phone number mapped to one). Via ENS resolver, fetch text records:
+
+| Record key | Example value | Purpose |
+|---|---|---|
+| `axl.node` | `ax1q9...` | AXL node pubkey/address |
+| `contact.price` | `0.25` | Toll in USDC to open channel |
+| `contact.currency` | `USDC` | Payment asset |
+| `contact.workflow` | `keeperhub://bella/inbound-toll` | KeeperHub workflow to invoke |
+| `capabilities` | `["booking","quotes"]` | What this agent can do |
+| `agent.version` | `tollgate/0.1` | Protocol version for forward compat |
+
+*(Key names above are our proposal — we'll pick either standard ENS keys where they exist or our own `tollgate.*` namespace.)*
+
+### Phase 1 — Voice greeting & agent detection
+Voice call is placed over a conventional channel (LiveKit / Twilio / SIP). Both agents greet in natural language. Agent-to-agent detection happens one of two ways:
+
+- **Option A (simple, MVP):** Each agent announces itself verbally: *"I'm an agent calling on behalf of Alex."* Parsed by the other side.
+- **Option B (cooler, stretch):** Each agent emits a short ~1-second acoustic token (ggwave or similar) embedding its AXL node ID. The other agent detects this and skips verbal discovery entirely.
+
+We default to A for the MVP and demo B as a stretch.
+
+### Phase 2 — Toll payment
+Caller agent calls KeeperHub's MCP server:
+```
+keeperhub.pay_workflow(
+  workflow_id = "bella/inbound-toll",
+  amount      = 0.25,
+  currency    = "USDC",
+  from        = alex_agent_wallet,
+  metadata    = { purpose: "inbound_channel", caller_ens: "alex.eth" }
+)
+```
+KeeperHub handles: retry, gas optimization, MEV-protected routing, audit trail. Returns a signed receipt + tx hash.
+
+### Phase 3 — Channel open
+Caller sends the receipt to the callee. Callee verifies (either by querying the chain, or by trusting KeeperHub's signed receipt). If valid, both AXL nodes connect. The voice line plays the **modem handshake sweep** — this is theater, not transport, but it's synchronized with the real event.
+
+### Phase 4 — Negotiation
+Structured messages over AXL. Schema depends on capability invoked. For the booking demo:
+
+```
+PROPOSE   { date, party_size, deposit_amount }
+COUNTER   { date, party_size, deposit_amount, alt_slots[] }
+ACCEPT    { slot_id, deposit_amount, terms_hash }
+REJECT    { reason }
+CONFIRM   { slot_id, signature }
+```
+
+Messages are serialized (protobuf or JSON), signed by the sending agent, sent over AXL. Voice line plays R2-D2-style chirps, pitch/density loosely synced to AXL message volume. Pure UX.
+
+### Phase 5 — Settlement
+Once `CONFIRM` is exchanged, caller invokes a second KeeperHub workflow to execute the actual deposit/escrow:
+```
+keeperhub.execute(
+  workflow_id = "bella/booking-deposit",
+  params      = { slot_id, amount, terms_hash },
+  audit_tag   = "tollgate-session-<uuid>"
+)
+```
+Tx confirms. Both sides have an audit trail they can replay.
+
+### Phase 6 — Teardown
+AXL channel closed. Voice call ends (or continues to human-to-human if one side wants to). UI on each side shows the receipt and full trace.
+
+---
+
+## 5. Voice / audio UX
+
+**The audio on the voice call is theater, not data transport.** We should say this openly — it's a stronger story than pretending otherwise, and it dodges any "why isn't this just a modem?" Q&A traps.
+
+Three audio moments, composed deliberately:
+
+1. **Handshake sweep** (~1–1.5s) — at the moment AXL opens. A dial-up-style warble. Instantly legible to anyone over 30 as "machines negotiating." Two sine oscillators sweeping against each other plus filtered noise gets us 80% there.
+2. **Negotiation chirps** (variable duration) — crisp square-wave beeps with short pitch bends, rhythm loosely synced to AXL message traffic. We can map message types to timbre: `PROPOSE` = rising, `COUNTER` = falling, `ACCEPT` = two-note resolve.
+3. **Settlement confirmation** — a clean two-note major-third when KeeperHub confirms the final tx. This is the "deal done" sound.
+
+Implementation: Tone.js in the browser demo, triggered by events from the agent runtime. A small audio state machine is enough.
+
+---
+
+## 6. Sponsor fit
+
+All three sponsors have **load-bearing** roles — not decorative stickers.
+
+### Gensyn — Best Application of AXL ($5,000 pool)
+- AXL is the transport for the entire negotiation. Not "we use AXL for one message" — the whole multi-round exchange is on it.
+- Two separate AXL nodes (caller + callee), satisfying the "not just in-process" requirement explicitly.
+- No central broker anywhere in the flow.
+- Depth-of-integration: structured message schemas, session teardown, signed payloads.
+
+### KeeperHub — Best Use of KeeperHub ($4,500 pool) + Feedback Bounty ($250)
+- **Paid inbound (Focus Area 1: Innovative use).** Every channel open is a KeeperHub-routed x402 payment. This is a genuinely new primitive.
+- **Payment integration (Focus Area 2).** x402 is used natively, for both toll and settlement.
+- **Publishable workflow.** We publish `inbound-toll` as a public KeeperHub workflow so other teams can adopt the pattern. This is the "build a bridge so other devs don't have to" angle.
+- **Feedback bounty.** We write a detailed FEEDBACK.md covering MCP ergonomics, x402 quirks, and doc gaps. Separate track, free to win.
+
+### ENS — Best ENS Integration for AI Agents ($2,500) + Most Creative Use ($2,500)
+- Every agent has a `.eth` identity. Text records publish AXL node, toll price, capabilities, and KeeperHub workflow pointer.
+- **Not cosmetic.** Without ENS, there's no discoverable pricing and no standard way to find an agent's AXL node. ENS *is* the directory.
+- **Creative angle.** The `contact.price` record is a novel pattern — using ENS text records as a public pricing/capability advertisement for agents. Eligible for the "Most Creative" track too.
+- Possibly also subname hierarchy: `booking.bella.eth`, `support.bella.eth` with different prices per capability.
+
+**Target: three tracks, two sponsors doubled up.** Gensyn + KeeperHub (+ feedback bounty) + ENS integration + ENS creative = potentially $17k in prize exposure from one coherent build.
+
+---
+
+## 7. Demo script (target: 2:45)
+
+1. **(0:00–0:15) Cold open.** Alex picks up phone: *"Book me a table at Bella for Friday, party of 4, up to $25 deposit."* Agent acknowledges.
+2. **(0:15–0:30) The spam demo.** Show an unpaid inbound call attempt from a random agent — it's rejected at the gate. *"This is why we built this."*
+3. **(0:30–1:00) The real call.** Alex's agent dials Bella. Voice greeting, agent detection. Screen shows ENS lookup resolving `bella.eth` → toll price $0.25.
+4. **(1:00–1:20) Toll payment.** KeeperHub MCP call shown in UI. Tx hash appears. *Handshake sweep audio plays.*
+5. **(1:20–1:50) Negotiation.** AXL messages streaming on screen side-by-side. R2-D2 chirps audible. Terms negotiated in ~5 seconds of real time.
+6. **(1:50–2:10) Settlement.** KeeperHub executes the deposit. Confirmation chime plays. Audit trail shown on screen.
+7. **(2:10–2:30) Report-back.** Both voice agents summarize to their humans. *"Table held, $20 paid, confirmation A4F2."*
+8. **(2:30–2:45) Tagline + team.** *"Tollgate. Stripe for agent-to-agent calls."*
+
+---
+
+## 8. Scope
+
+### MVP (must ship)
+- Two agent processes, each with its own AXL node.
+- One voice channel between them (LiveKit or Twilio).
+- ENS names for both, with at least `axl.node` and `contact.price` text records populated (on testnet or Sepolia).
+- KeeperHub MCP integration: toll payment workflow + settlement workflow.
+- Agent detection via verbal exchange (Option A).
+- Booking negotiation with at least PROPOSE / ACCEPT / CONFIRM.
+- Modem-sweep handshake + chirps + confirmation tone.
+- Clean demo UI showing trace (ENS resolve → toll tx → AXL messages → settlement tx).
+
+### Stretch (if time permits)
+- ggwave acoustic token for agent-to-agent detection (Option B).
+- Unpaid-call rejection demo (the "spam" opener).
+- Published `inbound-toll` KeeperHub workflow (public, reusable).
+- Capability-scoped subnames: `booking.bella.eth`, `quote.bella.eth` with different prices.
+- Additional scenario beyond booking (e.g. support-call prioritization).
+
+### Cuts we've already made
+- **No Uniswap.** Dropping the swap-to-USDC flow. Keeps scope tight and the story clean.
+- **No custom voice stack.** Use OpenAI Realtime or ElevenLabs Conversational. We do not win on voice quality.
+- **No real acoustic modem transport.** Audio is UX only; real data is on AXL.
+
+---
+
+## 9. Known risks & honest weaknesses
+
+- **AXL integration depth.** We're assuming a smooth path to running two AXL nodes and passing structured messages. If the binary / SDK has rough edges, we may lose a day. *Mitigation: get "hello world" over AXL working on day 1 before building anything on top.*
+- **KeeperHub x402 maturity.** x402 is a newer rail. If micropayment settlement is slow or flaky during demo, the whole "paid inbound" story stutters. *Mitigation: test KeeperHub tx latency early. If slow, pre-fund a channel-credit balance to avoid per-call tx on the hot path.*
+- **ENS on testnet vs. mainnet.** Test ENS names need to be set up early and may have propagation delays. *Mitigation: register day 1.*
+- **Voice latency.** Voice-to-voice with detection + AXL handshake + payment + negotiation in under 30 seconds is tight. Each component adds lag. *Mitigation: profile each stage early; optimize the slowest.*
+- **The "agent spam" framing is a thesis, not a proven market.** Judges may ask *"is this a real problem today?"* Answer honestly: *"Not yet. But by the time it is, the toll booth needs to already exist. That's why we built it now."*
+- **Demo on real money.** Even testnet, a failed tx mid-demo kills the moment. *Mitigation: mainnet rehearsal with real USDC before judging, and keep a pre-recorded fallback video.*
+
+---
+
+## 10. Open decisions (lock before coding)
+
+1. **Agent detection method for MVP:** verbal announcement vs. acoustic token. *Default: verbal. Revisit if ggwave integration looks <4 hours.*
+2. **Voice stack:** OpenAI Realtime vs. ElevenLabs vs. LiveKit Agents. *Default: LiveKit Agents — open, good Python SDK, good phone integration.*
+3. **Chain:** mainnet, Sepolia, Base? *Probably Base Sepolia — KeeperHub support assumed, low cost, good ENS support.*
+4. **Settlement form:** real escrow contract vs. simple USDC transfer with signed commitment? *Default: signed commitment + direct USDC transfer for MVP. Escrow is a stretch.*
+5. **Team role split:** who owns voice / AXL / KeeperHub / ENS / UI / audio design? *Do this in hour 1.*
+
+---
+
+## 11. Day-1 checklist
+
+Before writing any Tollgate-specific code:
+
+- [ ] Register `*.eth` test names on chosen chain for both demo agents.
+- [ ] Get two AXL nodes running and passing a trivial message across machines.
+- [ ] Get a successful KeeperHub MCP call resulting in a confirmed on-chain tx.
+- [ ] Get a basic voice-to-voice conversation working between two LiveKit agents.
+- [ ] Write a `FEEDBACK.md` stub for KeeperHub's builder feedback bounty (specific, actionable notes only).
+
+Once all five are green, start integrating.
+
+---
+
+## 12. Submission artifacts (what judges can click fast)
+
+- **Demo video (under 3 minutes):** `<add link>`
+- **Live demo link:** `<add link>`
+- **Public GitHub repo:** `<add link>`
+- **Contract addresses:** `<add chain + addresses>`
+- **ENS names used in demo:** `<alex.eth>`, `<bella.eth>` (or test equivalents)
+- **Team + contact info:** `<names, Telegram, X>`
+
+### Repository evidence pointers
+
+- `README.md` — setup, architecture, and sponsor mapping
+- `FEEDBACK.md` — KeeperHub integration feedback (for bounty eligibility)
+- `docs/demo-script.md` — timed 2:45 demo flow
+- `docs/architecture.md` — protocol flow + component boundaries
+- `src/agents/` — caller/callee agent runtimes
+- `src/protocol/` — AXL message schemas and signatures
+- `src/payments/` — KeeperHub workflows and receipt verification
+- `src/ens/` — ENS resolution + text-record parsing
+
+---
+
+## 13. Requirement -> evidence mapping
+
+### Gensyn (AXL)
+
+- **Requirement:** AXL used meaningfully for inter-agent communication across separate nodes.
+- **Evidence:** Two-node deployment + negotiation messages (`PROPOSE/COUNTER/ACCEPT/CONFIRM`) over AXL shown live in demo UI and logs.
+
+### KeeperHub
+
+- **Requirement:** Meaningful KeeperHub integration with working demo + docs.
+- **Evidence:** `inbound-toll` workflow and settlement workflow invoked in demo; tx hashes, receipts, and audit trace visible in UI.
+
+### KeeperHub Feedback Bounty
+
+- **Requirement:** Specific, actionable feedback (UX/UI, bugs, docs gaps, feature requests).
+- **Evidence:** Root `FEEDBACK.md` with reproducible steps and concrete suggestions.
+
+### ENS
+
+- **Requirement:** ENS must provide functional identity/discovery utility (not cosmetic).
+- **Evidence:** Agent discovery, pricing, capabilities, and workflow pointer resolved from ENS text records at call start.
+
+---
+
+## 14. Judge quickstart
+
+1. Open demo UI at `<add link>`.
+2. Trigger `caller -> bella` booking scenario.
+3. Watch ENS resolve (`bella.eth`) and toll amount appear.
+4. Confirm KeeperHub toll payment tx hash is produced.
+5. Observe AXL negotiation messages in real time.
+6. Confirm settlement tx + final voice summary.
+
+If local run is required:
+
+```bash
+# TODO: replace with exact commands
+pnpm install
+pnpm dev
+```
+
+---
+
+## 15. Success metrics (targets + observed)
+
+Track these in rehearsal and report best + median in README/demo notes:
+
+- **Time to open paid channel (target):** <= 8s from dial to toll receipt verified
+- **Negotiation latency (target):** <= 5s for booking exchange
+- **End-to-end call flow (target):** <= 30s to final confirmation
+- **Payment reliability (target):** >= 95% successful tx across rehearsal runs
+- **AXL delivery reliability (target):** 100% message delivery in scripted scenario
+
+Observed (fill before submission):
+
+- **Paid channel open:** `<best/median>`
+- **Negotiation:** `<best/median>`
+- **End-to-end:** `<best/median>`
+- **Tx success rate:** `<value>`
+- **AXL delivery:** `<value>`
+
+---
+
+## Appendix: names
+
+If "Tollgate" doesn't stick:
+- **Dialtone** — evokes the phone-era origin story
+- **Ringback** — nice double meaning (phone term + "ring back with payment")
+- **Turnstile** — clear metaphor, maybe too generic
+- **Handshake** — too overloaded a term in crypto
+- **Postage** — clean, direct, but less voice-specific
+
+Pick before the README goes public.
