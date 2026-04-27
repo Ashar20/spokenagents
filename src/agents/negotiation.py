@@ -124,10 +124,10 @@ async def run_negotiation(
         logger.info("AXL response: %s", response)
 
         if response.get("type") == "REJECT":
-            return NegotiationResult(success=False, error=f"Peer rejected: {response.get('reason', '')}")
+            return NegotiationResult(success=False, error=f"Peer rejected: {response.get('reason', '')}", toll_receipt=toll_receipt)
 
         if response.get("type") not in ("ACCEPT", "COUNTER"):
-            return NegotiationResult(success=False, error=f"Unexpected AXL message type: {response.get('type')}")
+            return NegotiationResult(success=False, error=f"Unexpected AXL message type: {response.get('type')}", toll_receipt=toll_receipt)
 
         # For COUNTER, accept the counter-offer (MVP: accept first counter)
         slot_id = response.get("slot_id", "")

@@ -56,9 +56,8 @@ class AudioEventEmitter:
             return
         payload = json.dumps({"event": event_type, **(data or {})})
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(self._ws.send(payload))
+            asyncio.get_running_loop()  # raises RuntimeError if no loop running
+            asyncio.create_task(self._ws.send(payload))
         except Exception as exc:
             logger.warning("AudioEventEmitter emit failed: %s", exc)
 
