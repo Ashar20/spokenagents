@@ -18,6 +18,7 @@ class ProposeMessage:
     party_size: int
     deposit_amount: str
     toll_receipt: dict[str, Any] = field(default_factory=dict)
+    caller_ens: str = ""           # ENS name of the caller agent
     type: str = MessageType.PROPOSE.value
 
     def to_dict(self) -> dict:

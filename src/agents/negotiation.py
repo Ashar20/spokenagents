@@ -17,12 +17,11 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Optional
 
 from src.ens.resolver import AgentRecord, resolve_agent_records
 from src.payments.keeperhub import KeeperHubClient, TollPaymentRequest
-from src.payments.receipt import Receipt, verify_receipt  # noqa: F401
-from src.protocol.messages import AcceptMessage, ConfirmMessage, ProposeMessage
+from src.payments.receipt import Receipt, verify_receipt
+from src.protocol.messages import ConfirmMessage, ProposeMessage
 from src.protocol.session import AXLSession
 
 logger = logging.getLogger(__name__)
@@ -34,8 +33,8 @@ class NegotiationResult:
     slot_id: str = ""
     deposit_amount: str = ""
     terms_hash: str = ""
-    toll_receipt: Optional[Receipt] = None
-    settlement_receipt: Optional[Receipt] = None
+    toll_receipt: Receipt | None = None
+    settlement_receipt: Receipt | None = None
     error: str = ""
     timings: dict = field(default_factory=dict)
 
@@ -58,59 +57,66 @@ async def run_negotiation(
     t_start = time.perf_counter()
     timings: dict[str, float] = {}
 
-    async def emit(event: str, data: Optional[dict] = None) -> None:
+    async def emit(event: str, data: dict | None = None) -> None:
         logger.info("[session %s] event: %s %s", session_id, event, data or "")
         if audio_emitter:
             await audio_emitter.aemit(event, data)
 
-    # --- Phase 0: ENS lookup (or forced record for single-agent demo) ---
+    # --- Phase 0: ENS lookup ---
     logger.info("Resolving ENS: %s", callee_ens)
     await emit("ens_resolving", {"name": callee_ens})
-    forced_node = os.environ.get("FORCE_BELLA_NODE")
-    if forced_node:
+    try:
+        record = await resolve_agent_records(callee_ens)
+    except Exception as exc:
+        logger.error("ENS resolution failed for %s: %s", callee_ens, exc)
+        # Fall back to env-supplied record so the demo still works without ENS
+        forced_node = os.environ.get("FORCE_BELLA_NODE")
+        if not forced_node:
+            return NegotiationResult(success=False, error=f"ENS resolution failed: {exc}")
         record = AgentRecord(
+            role="callee",
             axl_node=os.environ.get("BELLA_PEER_ID", ""),
-            toll_price=os.environ.get("FORCE_TOLL_PRICE", "0.25"),
+            bridge_url=forced_node,
+            wallet=os.environ.get("BELLA_WALLET_ADDRESS", ""),
+            toll_price=os.environ.get("FORCE_TOLL_PRICE", "0.05"),
             currency=os.environ.get("FORCE_TOLL_CURRENCY", "USDC"),
-            workflow_id=os.environ.get("BELLA_TOLL_WORKFLOW", "bella/inbound-toll"),
+            workflow_id=os.environ.get("TOLLGATE_WORKFLOW_ID", ""),
             capabilities=["dining"],
         )
-        logger.info("Using forced Bella record (peer=%s, bridge=%s)", record.axl_node[:12], forced_node)
-    else:
-        try:
-            record = await resolve_agent_records(callee_ens)
-        except Exception as exc:
-            logger.error("ENS resolution failed: %s", exc)
-            return NegotiationResult(success=False, error=f"ENS resolution failed: {exc}")
+        logger.warning("Using fallback Bella record from env vars")
 
     timings["ens_resolve"] = time.perf_counter() - t_start
     await emit("ens_resolved", {
         "name": callee_ens,
         "axl_node": record.axl_node,
+        "wallet": record.wallet,
         "toll_price": record.toll_price,
         "elapsed_s": round(timings["ens_resolve"], 3),
     })
-    logger.info("ENS resolved in %.2fs: axl_node=%s toll=%s %s", timings["ens_resolve"], record.axl_node, record.toll_price, record.currency)
+    logger.info(
+        "ENS resolved in %.2fs: role=%s wallet=%s toll=%s %s peer=%s",
+        timings["ens_resolve"], record.role, record.wallet,
+        record.toll_price, record.currency, record.axl_node[:12],
+    )
 
     # --- Phase 1: Toll payment ---
     skip_toll = os.environ.get("TOLL_REQUIRED", "true").lower() in ("false", "0", "no")
     logger.info("Paying toll: %s %s to workflow %s (skip=%s)", record.toll_price, record.currency, record.workflow_id, skip_toll)
     await emit("toll_paying", {"workflow_id": record.workflow_id, "amount": record.toll_price})
 
-    if skip_toll:
-        toll_receipt = Receipt(tx_hash="0xmocked-toll", signed_receipt="mock-sig", status="confirmed")
-        keeperhub = None
-    else:
-        keeperhub = KeeperHubClient()
+    keeperhub = None if skip_toll else KeeperHubClient()
     try:
-        if not skip_toll:
+        if skip_toll:
+            toll_receipt = Receipt(tx_hash="0xmocked-toll", signed_receipt="mock-sig", status="confirmed")
+        else:
             try:
                 toll_receipt = await keeperhub.pay_workflow(TollPaymentRequest(
-                    workflow_id=record.workflow_id,
+                    workflow_id=record.workflow_id or "tollgate/inbound-toll",
                     amount=record.toll_price,
                     currency=record.currency,
                     from_wallet=caller_wallet,
-                    caller_ens=caller_ens,
+                    to_wallet=record.wallet,
+                    metadata={"purpose": "inbound_channel", "caller_ens": caller_ens},
                 ))
             except Exception as exc:
                 logger.error("Toll payment failed: %s", exc)
@@ -130,13 +136,11 @@ async def run_negotiation(
 
         # --- Phase 2: AXL channel open + negotiation ---
         bridge_url = os.environ.get("ALEX_AXL_NODE", "http://127.0.0.1:9002")
-        peer_peer_id = record.axl_node
 
         await emit("handshake_sweep")
         await asyncio.sleep(0.3)
 
-        async with AXLSession(bridge_url=bridge_url, peer_peer_id=peer_peer_id) as session:
-            # PROPOSE — carries the toll receipt so Bella can verify before accepting
+        async with AXLSession(bridge_url=bridge_url, peer_peer_id=record.axl_node) as session:
             propose = ProposeMessage(
                 date=booking_date,
                 party_size=party_size,
@@ -146,34 +150,33 @@ async def run_negotiation(
                     "signed_receipt": toll_receipt.signed_receipt,
                     "status": toll_receipt.status,
                 },
+                caller_ens=caller_ens,
             )
             await session.send(propose.to_dict())
             await emit("chirp", {"msg_type": "PROPOSE"})
             logger.info("AXL PROPOSE sent: date=%s party=%d deposit=%s", booking_date, party_size, max_deposit)
             await asyncio.sleep(0.5)
 
-            # Receive response (ACCEPT, COUNTER, or REJECT)
             try:
                 response = await session.receive(timeout=30.0)
             except TimeoutError:
                 return NegotiationResult(success=False, error="AXL receive timed out waiting for ACCEPT")
 
-            await emit("chirp", {"msg_type": response.get("type", "UNKNOWN")})
+            rtype = response.get("type", "UNKNOWN")
+            await emit("chirp", {"msg_type": rtype})
             logger.info("AXL response: %s", response)
             await asyncio.sleep(0.4)
 
-            if response.get("type") == "REJECT":
+            if rtype == "REJECT":
                 return NegotiationResult(success=False, error=f"Peer rejected: {response.get('reason', '')}", toll_receipt=toll_receipt)
+            if rtype not in ("ACCEPT", "COUNTER"):
+                return NegotiationResult(success=False, error=f"Unexpected AXL message type: {rtype}", toll_receipt=toll_receipt)
 
-            if response.get("type") not in ("ACCEPT", "COUNTER"):
-                return NegotiationResult(success=False, error=f"Unexpected AXL message type: {response.get('type')}", toll_receipt=toll_receipt)
-
-            # For COUNTER, accept the counter-offer (MVP: accept first counter)
+            # MVP: accept first COUNTER as-is
             slot_id = response.get("slot_id", "")
             deposit = response.get("deposit_amount", max_deposit)
             terms_hash = response.get("terms_hash", "")
 
-            # CONFIRM
             confirm = ConfirmMessage(slot_id=slot_id, signature=f"agent-sig-{session_id}")
             await session.send(confirm.to_dict())
             await emit("chirp", {"msg_type": "CONFIRM"})
@@ -215,7 +218,7 @@ async def run_negotiation(
         await emit("settlement_done", {"tx_hash": settlement.tx_hash})
         await emit("timing", {k: round(v, 3) for k, v in timings.items()})
         logger.info("Settlement done: tx=%s", settlement.tx_hash)
-        # Final hold so the last beats finish playing before LLM speaks the confirmation
+        # Hold so the last beats finish playing before the LLM speaks the confirmation
         await asyncio.sleep(0.6)
 
         return NegotiationResult(

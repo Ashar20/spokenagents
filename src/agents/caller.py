@@ -147,12 +147,12 @@ async def main() -> None:
 
         emitter = _BeatAudioEmitter(beat_injector)
         result = await run_negotiation(
-            callee_ens="bella.eth",
+            callee_ens=os.environ.get("BELLA_ENS", "bella.spokenagents.eth"),
             booking_date=date,
             party_size=party_size,
             max_deposit=max_deposit,
             caller_wallet=os.environ.get("CALLER_WALLET", "0x0000"),
-            caller_ens=os.environ.get("CALLER_ENS", "alex.eth"),
+            caller_ens=os.environ.get("ALEX_ENS", "alex.spokenagents.eth"),
             audio_emitter=emitter,
         )
 
