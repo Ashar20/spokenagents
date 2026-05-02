@@ -15,7 +15,7 @@ function FitText({ children, className, style }: { children: string; className?:
     text.style.fontSize = "300px";
     const containerW = wrap.getBoundingClientRect().width;
     const textW = text.getBoundingClientRect().width;
-    if (textW > 0) text.style.fontSize = `${(containerW / textW) * 300}px`;
+    if (textW > 0) text.style.fontSize = `${(containerW / textW) * 265}px`;
   };
 
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function Landing() {
         <div className="relative">
           <FitText
             className="font-black tracking-tighter uppercase select-none"
-            style={{ fontFamily: '"Butler", serif', fontWeight: 900 }}
+            style={{ fontFamily: '"Butler", serif', fontWeight: 900, }}
           >
             TOLLGATE
           </FitText>
@@ -107,7 +107,7 @@ export default function Landing() {
           <div
             className="absolute bottom-0 left-0 right-0 pointer-events-none"
             style={{
-              height: "45%",
+              height: "85%",
               background: "linear-gradient(to top, #FF3300 0%, transparent 100%)",
             }}
           />
