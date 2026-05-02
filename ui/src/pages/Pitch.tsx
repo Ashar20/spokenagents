@@ -8,7 +8,7 @@ const ACCENT = "#FF3300";
 
 function TollgateLogoLarge() {
   return (
-    <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+    <svg width="96" height="96" viewBox="0 0 72 72" fill="none">
       {Array.from({ length: 20 }).map((_, i) => {
         const angle = (i * 360) / 20;
         const rad = (angle * Math.PI) / 180;
@@ -47,28 +47,33 @@ function TollgateLogoLarge() {
 
 function AgentSpamSVG() {
   return (
-    <svg viewBox="0 0 500 280" className="w-full max-w-lg" fill="none">
-      {[{ x: 28, y: 44 }, { x: 28, y: 110 }, { x: 28, y: 176 }, { x: 28, y: 242 }, { x: 78, y: 77 }, { x: 78, y: 209 }].map((pos, i) => (
+    <svg viewBox="0 0 600 400" className="w-full max-w-2xl" fill="none">
+      {[
+        { x: 30, y: 60 }, { x: 30, y: 150 }, { x: 30, y: 240 }, { x: 30, y: 330 },
+        { x: 110, y: 110 }, { x: 110, y: 290 },
+      ].map((pos, i) => (
         <g key={i}>
-          <rect x={pos.x} y={pos.y - 16} width={58} height={32} rx={6} fill="#1a1a1a" stroke="rgba(255,51,0,0.3)" strokeWidth={1} />
-          <text x={pos.x + 29} y={pos.y + 4} textAnchor="middle" fontSize={9} fill="#FF3300" fontFamily="monospace">SPAM</text>
-          <motion.line x1={pos.x + 58} y1={pos.y} x2={210} y2={140}
-            stroke="#FF3300" strokeWidth={1} strokeDasharray="4 3"
+          <rect x={pos.x} y={pos.y - 22} width={84} height={44} rx={8}
+            fill="#1a1a1a" stroke="rgba(255,51,0,0.35)" strokeWidth={1.5} />
+          <text x={pos.x + 42} y={pos.y + 6} textAnchor="middle"
+            fontSize={16} fill="#FF3300" fontFamily="monospace" fontWeight={600}>SPAM</text>
+          <motion.line x1={pos.x + 84} y1={pos.y} x2={285} y2={195}
+            stroke="#FF3300" strokeWidth={1.5} strokeDasharray="6 4"
             initial={{ pathLength: 0, opacity: 0 }}
-            animate={{ pathLength: 1, opacity: 0.4 }}
+            animate={{ pathLength: 1, opacity: 0.5 }}
             transition={{ delay: i * 0.15, duration: 0.8 }}
           />
         </g>
       ))}
-      <motion.rect x={200} y={112} width={80} height={56} rx={8} fill="#1a1a1a"
-        stroke="rgba(255,51,0,0.6)" strokeWidth={2}
-        animate={{ stroke: ["rgba(255,51,0,0.4)", "rgba(255,51,0,0.9)", "rgba(255,51,0,0.4)"] }}
+      <motion.rect x={270} y={150} width={120} height={90} rx={12}
+        fill="#1a1a1a" stroke="rgba(255,51,0,0.7)" strokeWidth={2.5}
+        animate={{ stroke: ["rgba(255,51,0,0.4)", "rgba(255,51,0,1)", "rgba(255,51,0,0.4)"] }}
         transition={{ repeat: Infinity, duration: 1.5 }}
       />
-      <text x={240} y={138} textAnchor="middle" fontSize={10} fill="white" fontFamily="monospace">bella.eth</text>
-      <text x={240} y={153} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.4)" fontFamily="monospace">OVERWHELMED</text>
-      <text x={120} y={270} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.3)" fontFamily="monospace">Cost to send: $0.001</text>
-      <text x={340} y={270} textAnchor="middle" fontSize={10} fill="rgba(255,255,255,0.3)" fontFamily="monospace">Cost to receive: $0.10+</text>
+      <text x={330} y={190} textAnchor="middle" fontSize={18} fill="white" fontFamily="monospace" fontWeight={600}>bella.eth</text>
+      <text x={330} y={215} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.5)" fontFamily="monospace">OVERWHELMED</text>
+      <text x={150} y={385} textAnchor="middle" fontSize={15} fill="rgba(255,255,255,0.5)" fontFamily="monospace">Cost to send: $0.001</text>
+      <text x={450} y={385} textAnchor="middle" fontSize={15} fill="rgba(255,255,255,0.5)" fontFamily="monospace">Cost to receive: $0.10+</text>
     </svg>
   );
 }
@@ -84,35 +89,42 @@ function TollgateDiagramSVG() {
   }, []);
 
   return (
-    <svg viewBox="0 0 520 260" className="w-full max-w-lg" fill="none">
-      <rect x={20} y={95} width={90} height={50} rx={8} fill="#1a1a1a" stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-      <text x={65} y={116} textAnchor="middle" fontSize={10} fill="white" fontFamily="monospace">alex.eth</text>
-      <text x={65} y={132} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.4)" fontFamily="monospace">caller</text>
+    <svg viewBox="0 0 640 380" className="w-full max-w-2xl" fill="none">
+      {/* Caller */}
+      <rect x={20} y={140} width={130} height={75} rx={10}
+        fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
+      <text x={85} y={175} textAnchor="middle" fontSize={17} fill="white" fontFamily="monospace" fontWeight={600}>alex.eth</text>
+      <text x={85} y={198} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.45)" fontFamily="monospace">caller</text>
 
-      <motion.rect x={200} y={85} width={120} height={70} rx={10} fill="#0a0a0a"
-        stroke={ACCENT} strokeWidth={2}
-        animate={{ strokeOpacity: [0.4, 1, 0.4] }}
+      {/* Tollgate center */}
+      <motion.rect x={245} y={120} width={150} height={115} rx={14}
+        fill="#0a0a0a" stroke={ACCENT} strokeWidth={2.5}
+        animate={{ strokeOpacity: [0.5, 1, 0.5] }}
         transition={{ repeat: Infinity, duration: 2 }}
       />
-      <text x={260} y={113} textAnchor="middle" fontSize={12} fill={ACCENT} fontFamily="serif" fontWeight={700}>TOLLGATE</text>
-      <text x={260} y={128} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.4)" fontFamily="monospace">ENS + KeeperHub + AXL</text>
-      <text x={260} y={142} textAnchor="middle" fontSize={8} fill="rgba(255,51,0,0.7)" fontFamily="monospace">$0.25 toll</text>
+      <text x={320} y={158} textAnchor="middle" fontSize={20} fill={ACCENT} fontFamily="serif" fontWeight={800}>TOLLGATE</text>
+      <text x={320} y={185} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.5)" fontFamily="monospace">ENS · KeeperHub · AXL</text>
+      <text x={320} y={212} textAnchor="middle" fontSize={14} fill={ACCENT} fontFamily="monospace" fontWeight={600}>$0.25 toll</text>
 
-      <rect x={410} y={95} width={90} height={50} rx={8} fill="#1a1a1a" stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-      <text x={455} y={116} textAnchor="middle" fontSize={10} fill="white" fontFamily="monospace">bella.eth</text>
-      <text x={455} y={132} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.4)" fontFamily="monospace">callee</text>
+      {/* Callee */}
+      <rect x={490} y={140} width={130} height={75} rx={10}
+        fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
+      <text x={555} y={175} textAnchor="middle" fontSize={17} fill="white" fontFamily="monospace" fontWeight={600}>bella.eth</text>
+      <text x={555} y={198} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.45)" fontFamily="monospace">callee</text>
 
-      <motion.line x1={110} y1={120} x2={200} y2={120}
-        stroke={step >= 1 ? ACCENT : "rgba(255,255,255,0.1)"} strokeWidth={2} strokeDasharray="6 3"
+      {/* Lines */}
+      <motion.line x1={150} y1={177} x2={245} y2={177}
+        stroke={step >= 1 ? ACCENT : "rgba(255,255,255,0.12)"} strokeWidth={2.5} strokeDasharray="8 4"
         animate={{ opacity: 1 }} />
-      <motion.line x1={320} y1={120} x2={410} y2={120}
-        stroke={step >= 2 ? "#00FF88" : "rgba(255,255,255,0.1)"} strokeWidth={2} strokeDasharray="6 3"
-        animate={{ opacity: step >= 2 ? 1 : 0.2 }} transition={{ duration: 0.4 }} />
+      <motion.line x1={395} y1={177} x2={490} y2={177}
+        stroke={step >= 2 ? "#00FF88" : "rgba(255,255,255,0.12)"} strokeWidth={2.5} strokeDasharray="8 4"
+        animate={{ opacity: step >= 2 ? 1 : 0.25 }} transition={{ duration: 0.4 }} />
 
-      <rect x={160} y={190} width={200} height={26} rx={13} fill="#1a1a1a" />
+      {/* Step indicator */}
+      <rect x={195} y={285} width={250} height={40} rx={20} fill="#1a1a1a" />
       <AnimatePresence mode="wait">
-        <motion.text key={step} x={260} y={207} textAnchor="middle" fontSize={10}
-          fill={colors[step]} fontFamily="monospace"
+        <motion.text key={step} x={320} y={310} textAnchor="middle" fontSize={16}
+          fill={colors[step]} fontFamily="monospace" fontWeight={600}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
         >
@@ -120,11 +132,12 @@ function TollgateDiagramSVG() {
         </motion.text>
       </AnimatePresence>
 
-      <motion.circle cx={260} cy={46} r={6} fill={ACCENT}
+      {/* Live indicator */}
+      <motion.circle cx={320} cy={68} r={8} fill={ACCENT}
         animate={{ scale: [1, 1.4, 1], opacity: [1, 0.4, 1] }}
         transition={{ repeat: Infinity, duration: 1.5 }}
       />
-      <text x={260} y={68} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.25)" fontFamily="monospace">LIVE</text>
+      <text x={320} y={98} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.4)" fontFamily="monospace" fontWeight={600}>LIVE</text>
     </svg>
   );
 }
@@ -139,47 +152,54 @@ function AXLFlowSVG() {
   }, []);
 
   return (
-    <svg viewBox="0 0 500 240" className="w-full max-w-lg" fill="none">
-      <rect x={20} y={75} width={80} height={90} rx={8} fill="#0a0a0a" stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-      <text x={60} y={100} textAnchor="middle" fontSize={9} fill="white" fontFamily="monospace">alex.eth</text>
-      <text x={60} y={114} textAnchor="middle" fontSize={7} fill="rgba(255,255,255,0.3)" fontFamily="monospace">AXL node</text>
+    <svg viewBox="0 0 640 360" className="w-full max-w-2xl" fill="none">
+      {/* Alex node */}
+      <rect x={20} y={100} width={120} height={140} rx={10}
+        fill="#0a0a0a" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
+      <text x={80} y={140} textAnchor="middle" fontSize={16} fill="white" fontFamily="monospace" fontWeight={600}>alex.eth</text>
+      <text x={80} y={162} textAnchor="middle" fontSize={12} fill="rgba(255,255,255,0.4)" fontFamily="monospace">AXL node</text>
       {[0, 1, 2, 3, 4].map(i => (
-        <motion.rect key={i} x={30 + i * 11} y={130} width={8} rx={4} fill={ACCENT}
-          animate={{ height: [4, 18 + i * 3, 4], y: [144, 130 - i * 1.5, 144] }}
+        <motion.rect key={i} x={36 + i * 14} y={195} width={10} rx={5} fill={ACCENT}
+          animate={{ height: [6, 26 + i * 4, 6], y: [218, 192 - i * 2, 218] }}
           transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.15 }}
         />
       ))}
 
-      <rect x={400} y={75} width={80} height={90} rx={8} fill="#0a0a0a" stroke="rgba(255,255,255,0.1)" strokeWidth={1} />
-      <text x={440} y={100} textAnchor="middle" fontSize={9} fill="white" fontFamily="monospace">bella.eth</text>
-      <text x={440} y={114} textAnchor="middle" fontSize={7} fill="rgba(255,255,255,0.3)" fontFamily="monospace">AXL node</text>
+      {/* Bella node */}
+      <rect x={500} y={100} width={120} height={140} rx={10}
+        fill="#0a0a0a" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
+      <text x={560} y={140} textAnchor="middle" fontSize={16} fill="white" fontFamily="monospace" fontWeight={600}>bella.eth</text>
+      <text x={560} y={162} textAnchor="middle" fontSize={12} fill="rgba(255,255,255,0.4)" fontFamily="monospace">AXL node</text>
       {[0, 1, 2, 3, 4].map(i => (
-        <motion.rect key={i} x={406 + i * 11} y={130} width={8} rx={4} fill="#00FF88"
-          animate={{ height: [4, 14 + i * 2.5, 4], y: [144, 132 - i * 1.2, 144] }}
+        <motion.rect key={i} x={516 + i * 14} y={195} width={10} rx={5} fill="#00FF88"
+          animate={{ height: [6, 22 + i * 3, 6], y: [218, 196 - i * 1.5, 218] }}
           transition={{ repeat: Infinity, duration: 1.0, delay: i * 0.12 }}
         />
       ))}
 
-      <rect x={148} y={103} width={204} height={38} rx={19} fill="#1a1a1a" stroke="rgba(255,255,255,0.07)" />
+      {/* Channel pill */}
+      <rect x={180} y={150} width={280} height={56} rx={28}
+        fill="#1a1a1a" stroke="rgba(255,255,255,0.1)" />
       <AnimatePresence mode="wait">
-        <motion.text key={active} x={250} y={127} textAnchor="middle" fontSize={11}
-          fill={msgColors[active]} fontFamily="monospace" fontWeight={600}
+        <motion.text key={active} x={320} y={184} textAnchor="middle" fontSize={20}
+          fill={msgColors[active]} fontFamily="monospace" fontWeight={700}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.25 }}
         >
           {messages[active]}
         </motion.text>
       </AnimatePresence>
-      <text x={250} y={76} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.2)" fontFamily="monospace">
+      <text x={320} y={120} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.35)" fontFamily="monospace" fontWeight={600}>
         AXL P2P CHANNEL — ENCRYPTED
       </text>
+      {/* Chirp dots */}
       {[0, 1, 2].map(i => (
-        <motion.circle key={i} cx={210 + i * 20} cy={168} r={3} fill={ACCENT}
-          animate={{ opacity: active === i ? [0.3, 1, 0.3] : 0.15, scale: active === i ? [1, 1.5, 1] : 1 }}
+        <motion.circle key={i} cx={270 + i * 28} cy={245} r={5} fill={ACCENT}
+          animate={{ opacity: active === i ? [0.3, 1, 0.3] : 0.18, scale: active === i ? [1, 1.5, 1] : 1 }}
           transition={{ duration: 0.4 }}
         />
       ))}
-      <text x={250} y={192} textAnchor="middle" fontSize={7} fill="rgba(255,255,255,0.2)" fontFamily="monospace">
+      <text x={320} y={285} textAnchor="middle" fontSize={12} fill="rgba(255,255,255,0.32)" fontFamily="monospace">
         ◈ chirps synced to message traffic ◈
       </text>
     </svg>
@@ -188,43 +208,54 @@ function AXLFlowSVG() {
 
 function ArchitectureSVG() {
   return (
-    <svg viewBox="0 0 520 300" className="w-full max-w-2xl" fill="none">
+    <svg viewBox="0 0 760 460" className="w-full max-w-3xl" fill="none">
+      {/* ENS */}
       <motion.g initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-        <rect x={20} y={20} width={110} height={60} rx={10} fill="#0d1a3a" stroke="#5298FF30" strokeWidth={1.5} />
-        <text x={75} y={47} textAnchor="middle" fontSize={12} fill="#5298FF" fontFamily="serif" fontWeight={700}>ENS</text>
-        <text x={75} y={63} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace">Directory</text>
+        <rect x={30} y={30} width={170} height={90} rx={14}
+          fill="#0d1a3a" stroke="#5298FF40" strokeWidth={2} />
+        <text x={115} y={70} textAnchor="middle" fontSize={22} fill="#5298FF" fontFamily="serif" fontWeight={800}>ENS</text>
+        <text x={115} y={95} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.45)" fontFamily="monospace">Directory</text>
       </motion.g>
+      {/* KeeperHub */}
       <motion.g initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <rect x={205} y={20} width={110} height={60} rx={10} fill="#2a0a00" stroke={`${ACCENT}30`} strokeWidth={1.5} />
-        <text x={260} y={47} textAnchor="middle" fontSize={10} fill={ACCENT} fontFamily="serif" fontWeight={700}>KeeperHub</text>
-        <text x={260} y={63} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace">Payments</text>
+        <rect x={295} y={30} width={170} height={90} rx={14}
+          fill="#2a0a00" stroke={`${ACCENT}40`} strokeWidth={2} />
+        <text x={380} y={70} textAnchor="middle" fontSize={20} fill={ACCENT} fontFamily="serif" fontWeight={800}>KeeperHub</text>
+        <text x={380} y={95} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.45)" fontFamily="monospace">Payments</text>
       </motion.g>
+      {/* AXL */}
       <motion.g initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <rect x={390} y={20} width={110} height={60} rx={10} fill="#003a1a" stroke="#00FF8830" strokeWidth={1.5} />
-        <text x={445} y={47} textAnchor="middle" fontSize={12} fill="#00FF88" fontFamily="serif" fontWeight={700}>AXL</text>
-        <text x={445} y={63} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace">P2P Transport</text>
+        <rect x={560} y={30} width={170} height={90} rx={14}
+          fill="#003a1a" stroke="#00FF8840" strokeWidth={2} />
+        <text x={645} y={70} textAnchor="middle" fontSize={22} fill="#00FF88" fontFamily="serif" fontWeight={800}>AXL</text>
+        <text x={645} y={95} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.45)" fontFamily="monospace">P2P Transport</text>
       </motion.g>
+      {/* alex.eth */}
       <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-        <rect x={40} y={150} width={100} height={55} rx={8} fill="#1a1a1a" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        <text x={90} y={174} textAnchor="middle" fontSize={10} fill="white" fontFamily="monospace">alex.eth</text>
-        <text x={90} y={189} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace">caller agent</text>
+        <rect x={60} y={250} width={150} height={85} rx={12}
+          fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
+        <text x={135} y={290} textAnchor="middle" fontSize={17} fill="white" fontFamily="monospace" fontWeight={600}>alex.eth</text>
+        <text x={135} y={313} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.4)" fontFamily="monospace">caller agent</text>
       </motion.g>
+      {/* bella.eth */}
       <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}>
-        <rect x={380} y={150} width={100} height={55} rx={8} fill="#1a1a1a" stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-        <text x={430} y={174} textAnchor="middle" fontSize={10} fill="white" fontFamily="monospace">bella.eth</text>
-        <text x={430} y={189} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.3)" fontFamily="monospace">callee agent</text>
+        <rect x={550} y={250} width={150} height={85} rx={12}
+          fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" strokeWidth={1.5} />
+        <text x={625} y={290} textAnchor="middle" fontSize={17} fill="white" fontFamily="monospace" fontWeight={600}>bella.eth</text>
+        <text x={625} y={313} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.4)" fontFamily="monospace">callee agent</text>
       </motion.g>
-      <motion.path d="M90 150 L75 80" stroke="#5298FF" strokeWidth={1} strokeDasharray="4 3"
+      {/* Connection lines */}
+      <motion.path d="M135 250 L115 120" stroke="#5298FF" strokeWidth={1.5} strokeDasharray="6 4"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.7, duration: 0.5 }} />
-      <motion.path d="M140 178 L205 50" stroke={ACCENT} strokeWidth={1} strokeDasharray="4 3"
+      <motion.path d="M210 290 L295 75" stroke={ACCENT} strokeWidth={1.5} strokeDasharray="6 4"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.9, duration: 0.5 }} />
-      <motion.path d="M90 150 Q260 110 445 150" stroke="#00FF88" strokeWidth={1} strokeDasharray="6 3"
+      <motion.path d="M135 250 Q380 180 625 250" stroke="#00FF88" strokeWidth={2} strokeDasharray="8 4"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 1.1, duration: 0.8 }} />
-      <motion.path d="M430 150 L75 80" stroke="#5298FF" strokeWidth={1} strokeDasharray="4 3" opacity={0.35}
+      <motion.path d="M625 250 L115 120" stroke="#5298FF" strokeWidth={1.5} strokeDasharray="6 4" opacity={0.4}
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 0.8, duration: 0.5 }} />
-      <motion.path d="M380 178 L315 80" stroke={ACCENT} strokeWidth={1} strokeDasharray="4 3" opacity={0.35}
+      <motion.path d="M550 290 L465 75" stroke={ACCENT} strokeWidth={1.5} strokeDasharray="6 4" opacity={0.4}
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: 1.0, duration: 0.5 }} />
-      <text x={260} y={278} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.18)" fontFamily="monospace">
+      <text x={380} y={420} textAnchor="middle" fontSize={13} fill="rgba(255,255,255,0.3)" fontFamily="monospace">
         All three sponsors are load-bearing. None are decorative.
       </text>
     </svg>
@@ -233,25 +264,31 @@ function ArchitectureSVG() {
 
 function MarketSVG() {
   const bars = [
-    { label: "2024", val: 15, color: "rgba(255,255,255,0.18)" },
-    { label: "2025", val: 38, color: "rgba(255,255,255,0.3)" },
+    { label: "2024", val: 15, color: "rgba(255,255,255,0.22)" },
+    { label: "2025", val: 38, color: "rgba(255,255,255,0.4)" },
     { label: "2026", val: 72, color: ACCENT },
     { label: "2027", val: 160, color: ACCENT },
     { label: "2028", val: 310, color: ACCENT },
   ];
   return (
-    <svg viewBox="0 0 400 210" className="w-full max-w-md" fill="none">
-      <text x={200} y={16} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.28)" fontFamily="monospace">AGENT-TO-AGENT CALLS (indexed)</text>
+    <svg viewBox="0 0 600 360" className="w-full max-w-2xl" fill="none">
+      <text x={300} y={30} textAnchor="middle" fontSize={14}
+        fill="rgba(255,255,255,0.45)" fontFamily="monospace" fontWeight={600}>
+        AGENT-TO-AGENT CALLS (indexed)
+      </text>
       {bars.map((b, i) => {
-        const h = (b.val / 310) * 145;
+        const h = (b.val / 310) * 235;
+        const x = 50 + i * 105;
         return (
           <g key={i}>
-            <motion.rect x={30 + i * 72} y={175 - h} width={48} height={h} rx={4} fill={b.color}
-              initial={{ height: 0, y: 175 }} animate={{ height: h, y: 175 - h }}
+            <motion.rect x={x} y={290 - h} width={75} height={h} rx={6} fill={b.color}
+              initial={{ height: 0, y: 290 }} animate={{ height: h, y: 290 - h }}
               transition={{ delay: 0.3 + i * 0.15, duration: 0.7, ease: "easeOut" }}
             />
-            <text x={54 + i * 72} y={192} textAnchor="middle" fontSize={9} fill="rgba(255,255,255,0.35)" fontFamily="monospace">{b.label}</text>
-            <motion.text x={54 + i * 72} y={175 - h - 6} textAnchor="middle" fontSize={9} fill={b.color} fontFamily="monospace"
+            <text x={x + 38} y={320} textAnchor="middle" fontSize={15}
+              fill="rgba(255,255,255,0.45)" fontFamily="monospace" fontWeight={600}>{b.label}</text>
+            <motion.text x={x + 38} y={290 - h - 10} textAnchor="middle" fontSize={16}
+              fill={b.color} fontFamily="monospace" fontWeight={700}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 + i * 0.15 }}
             >{b.val}x</motion.text>
           </g>
@@ -267,32 +304,33 @@ const slides = [
   {
     id: "title", label: null,
     content: (
-      <div className="flex flex-col items-center justify-center text-center h-full gap-8 relative">
+      <div className="flex flex-col items-center justify-center text-center h-full gap-10 relative">
         <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.6 }}>
           <TollgateLogoLarge />
         </motion.div>
         <motion.h1
-          className="text-7xl md:text-9xl font-black tracking-tighter leading-none"
+          className="text-8xl md:text-[10rem] font-black tracking-tighter leading-none"
           style={{ fontFamily: '"Butler", serif', color: ACCENT, fontWeight: 900 }}
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
         >
           TOLLGATE
         </motion.h1>
-        <motion.p className="text-xl md:text-2xl text-white/60 max-w-lg"
+        <motion.p className="text-2xl md:text-3xl text-white/70 max-w-2xl"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }}
         >
           Stripe for agent-to-agent calls.
         </motion.p>
         <motion.div className="flex gap-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}>
           {["Gensyn AXL", "KeeperHub", "ENS"].map(tag => (
-            <span key={tag} className="px-3 py-1 rounded-full border text-xs font-mono" style={{ borderColor: `${ACCENT}40`, color: `${ACCENT}90` }}>{tag}</span>
+            <span key={tag} className="px-4 py-1.5 rounded-full border text-sm font-mono"
+              style={{ borderColor: `${ACCENT}50`, color: `${ACCENT}` }}>{tag}</span>
           ))}
         </motion.div>
         <motion.div className="absolute bottom-8 flex flex-col items-center"
           animate={{ y: [0, 8, 0] }} transition={{ repeat: Infinity, duration: 1.8 }}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <path d="M12 5v14M5 12l7 7 7-7" stroke="rgba(255,255,255,0.3)" strokeWidth="2" strokeLinecap="round" />
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M5 12l7 7 7-7" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </motion.div>
       </div>
@@ -303,15 +341,25 @@ const slides = [
     content: (
       <div className="flex flex-col lg:flex-row items-center gap-12 h-full">
         <div className="flex-1">
-          <h2 className="text-5xl md:text-6xl font-black leading-none tracking-tighter mb-6 text-white" style={{ fontFamily: '"Butler", serif' }}>
-            AI robocalls are<br /><span style={{ color: ACCENT }}>inevitable.</span>
+          <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter mb-8 text-white"
+            style={{ fontFamily: '"Butler", serif' }}>
+            AI voice agents are<br /><span style={{ color: ACCENT }}>inevitable.</span>
           </h2>
-          <ul className="space-y-4 text-white/50 text-sm max-w-md">
-            {["Every business will have a voice agent", "LLM calls cost fractions of a cent to generate", "Any agent can call any agent, at infinite scale, for free", "No postage. No rate-limiting. No toll booth. Yet."]
-              .map(txt => <li key={txt} className="flex gap-3"><span style={{ color: ACCENT }}>×</span>{txt}</li>)}
+          <ul className="space-y-4 text-white/70 text-lg max-w-md">
+            {[
+              "Every business deploys one this year",
+              "LLM-generated calls cost fractions of a cent",
+              "Any agent can call any agent, at infinite scale, for free",
+              "No postage. No rate-limiting. No toll booth. Yet.",
+            ].map(txt => (
+              <li key={txt} className="flex gap-3">
+                <span className="text-2xl leading-none" style={{ color: ACCENT }}>×</span>
+                <span>{txt}</span>
+              </li>
+            ))}
           </ul>
         </div>
-        <div className="flex-shrink-0"><AgentSpamSVG /></div>
+        <div className="flex-1 flex justify-center"><AgentSpamSVG /></div>
       </div>
     ),
   },
@@ -320,24 +368,26 @@ const slides = [
     content: (
       <div className="flex flex-col lg:flex-row items-center gap-12 h-full">
         <div className="flex-1">
-          <h2 className="text-5xl font-black leading-none tracking-tighter mb-6 text-white" style={{ fontFamily: '"Butler", serif' }}>
+          <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter mb-8 text-white"
+            style={{ fontFamily: '"Butler", serif' }}>
             The window is<br /><span style={{ color: ACCENT }}>right now.</span>
           </h2>
-          <div className="grid gap-4 max-w-sm">
+          <div className="grid gap-4 max-w-md">
             {[
-              { num: "01", title: "Agents are proliferating", desc: "OpenAI, Anthropic, every Fortune 500 shipping voice agents in 2025." },
-              { num: "02", title: "x402 is production-ready", desc: "HTTP-native micropayments over EVM chains. No extra infra." },
-              { num: "03", title: "ENS is the directory", desc: "A global, open, censorship-resistant agent registry already exists." },
+              { num: "01", title: "Voice agents are proliferating", desc: "OpenAI, Anthropic, every Fortune 500 shipping voice agents in 2025." },
+              { num: "02", title: "x402 is production-ready", desc: "HTTP-native micropayments over EVM. No extra infrastructure." },
+              { num: "03", title: "ENS is the directory", desc: "A global, open, censorship-resistant registry already exists." },
             ].map(item => (
-              <div key={item.num} className="border rounded-xl p-4" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
-                <span className="text-xs font-mono" style={{ color: ACCENT }}>{item.num}</span>
-                <p className="text-white font-semibold text-sm mt-1">{item.title}</p>
-                <p className="text-white/40 text-xs mt-1 leading-relaxed">{item.desc}</p>
+              <div key={item.num} className="border rounded-xl p-5"
+                style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.025)" }}>
+                <span className="text-sm font-mono font-semibold" style={{ color: ACCENT }}>{item.num}</span>
+                <p className="text-white font-bold text-lg mt-1">{item.title}</p>
+                <p className="text-white/55 text-sm mt-1.5 leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
         </div>
-        <div className="flex-shrink-0"><MarketSVG /></div>
+        <div className="flex-1 flex justify-center"><MarketSVG /></div>
       </div>
     ),
   },
@@ -346,22 +396,28 @@ const slides = [
     content: (
       <div className="flex flex-col lg:flex-row items-center gap-12 h-full">
         <div className="flex-1">
-          <h2 className="text-5xl font-black leading-none tracking-tighter mb-4 text-white" style={{ fontFamily: '"Butler", serif' }}>
+          <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter mb-6 text-white"
+            style={{ fontFamily: '"Butler", serif' }}>
             To reach an agent,<br /><span style={{ color: ACCENT }}>another agent pays.</span>
           </h2>
-          <div className="border-l-2 pl-4 my-6 italic text-white/50 text-base max-w-xs" style={{ borderColor: ACCENT }}>
+          <div className="border-l-4 pl-5 my-8 italic text-white/70 text-xl max-w-md leading-snug"
+            style={{ borderColor: ACCENT }}>
             "The toll booth that should've been built before the highway."
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-8">
-            {[{ stat: "$0.25", label: "avg toll" }, { stat: "30s", label: "end-to-end" }, { stat: "100%", label: "on-chain audit" }].map(s => (
-              <div key={s.stat} className="text-center">
-                <div className="text-3xl font-black" style={{ fontFamily: '"Butler", serif', color: ACCENT }}>{s.stat}</div>
-                <div className="text-xs font-mono text-white/30 tracking-widest uppercase mt-1">{s.label}</div>
+          <div className="grid grid-cols-3 gap-6 mt-10 max-w-md">
+            {[
+              { stat: "$0.25", label: "avg toll" },
+              { stat: "30s", label: "end-to-end" },
+              { stat: "100%", label: "on-chain audit" },
+            ].map(s => (
+              <div key={s.stat}>
+                <div className="text-4xl md:text-5xl font-black" style={{ fontFamily: '"Butler", serif', color: ACCENT }}>{s.stat}</div>
+                <div className="text-xs font-mono text-white/45 tracking-widest uppercase mt-2">{s.label}</div>
               </div>
             ))}
           </div>
         </div>
-        <div className="flex-shrink-0"><TollgateDiagramSVG /></div>
+        <div className="flex-1 flex justify-center"><TollgateDiagramSVG /></div>
       </div>
     ),
   },
@@ -370,10 +426,11 @@ const slides = [
     content: (
       <div className="flex flex-col lg:flex-row items-center gap-12 h-full">
         <div className="flex-1">
-          <h2 className="text-5xl font-black leading-none tracking-tighter mb-8 text-white" style={{ fontFamily: '"Butler", serif' }}>
+          <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter mb-10 text-white"
+            style={{ fontFamily: '"Butler", serif' }}>
             Six phases.<br />One paid channel.
           </h2>
-          <div className="space-y-3 max-w-sm">
+          <div className="space-y-4 max-w-md">
             {[
               { num: "01", label: "Discovery", detail: "bella.eth → AXL node + toll via ENS" },
               { num: "02", label: "Voice greeting", detail: "LiveKit, agent-to-agent detection" },
@@ -382,42 +439,44 @@ const slides = [
               { num: "05", label: "Negotiation", detail: "PROPOSE → ACCEPT → CONFIRM" },
               { num: "06", label: "Settlement", detail: "KeeperHub deposit + audit trail" },
             ].map((step, i) => (
-              <motion.div key={step.num} className="flex gap-4 items-start"
+              <motion.div key={step.num} className="flex gap-5 items-baseline"
                 initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.08 * i }}
               >
-                <span className="text-xs font-mono shrink-0 w-6 pt-0.5" style={{ color: ACCENT }}>{step.num}</span>
+                <span className="text-sm font-mono font-bold shrink-0 w-8" style={{ color: ACCENT }}>{step.num}</span>
                 <div>
-                  <span className="text-sm font-semibold text-white">{step.label}</span>
-                  <span className="text-xs text-white/30 ml-2">{step.detail}</span>
+                  <span className="text-lg font-bold text-white">{step.label}</span>
+                  <span className="text-sm text-white/50 ml-3">{step.detail}</span>
                 </div>
               </motion.div>
             ))}
           </div>
         </div>
-        <div className="flex-shrink-0"><AXLFlowSVG /></div>
+        <div className="flex-1 flex justify-center"><AXLFlowSVG /></div>
       </div>
     ),
   },
   {
     id: "technology", label: "05 — Technology",
     content: (
-      <div className="h-full flex flex-col gap-8">
-        <h2 className="text-5xl font-black leading-none tracking-tighter text-white" style={{ fontFamily: '"Butler", serif' }}>
+      <div className="h-full flex flex-col gap-10">
+        <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter text-white"
+          style={{ fontFamily: '"Butler", serif' }}>
           All three sponsors are <span style={{ color: ACCENT }}>load-bearing.</span>
         </h2>
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center min-h-0">
           <ArchitectureSVG />
         </div>
-        <div className="grid grid-cols-3 gap-4 max-w-2xl">
+        <div className="grid grid-cols-3 gap-5 max-w-4xl">
           {[
             { name: "ENS", color: "#5298FF", desc: "Agent directory — AXL node, toll price, capabilities as text records." },
             { name: "KeeperHub", color: ACCENT, desc: "x402 toll + settlement with MEV protection and full audit trail." },
             { name: "Gensyn AXL", color: "#00FF88", desc: "Encrypted P2P negotiation — PROPOSE/ACCEPT/CONFIRM messages." },
           ].map(t => (
-            <div key={t.name} className="border rounded-xl p-4" style={{ borderColor: `${t.color}25`, background: `${t.color}05` }}>
-              <p className="font-bold text-sm mb-1" style={{ color: t.color }}>{t.name}</p>
-              <p className="text-white/35 text-xs leading-relaxed">{t.desc}</p>
+            <div key={t.name} className="border rounded-xl p-5"
+              style={{ borderColor: `${t.color}30`, background: `${t.color}08` }}>
+              <p className="font-bold text-lg mb-2" style={{ color: t.color }}>{t.name}</p>
+              <p className="text-white/55 text-sm leading-relaxed">{t.desc}</p>
             </div>
           ))}
         </div>
@@ -427,27 +486,32 @@ const slides = [
   {
     id: "demo", label: "06 — Demo",
     content: (
-      <div className="h-full flex flex-col gap-8">
-        <h2 className="text-5xl font-black leading-none tracking-tighter text-white" style={{ fontFamily: '"Butler", serif' }}>
+      <div className="h-full flex flex-col gap-10">
+        <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter text-white"
+          style={{ fontFamily: '"Butler", serif' }}>
           "Book me a table<br /><span style={{ color: ACCENT }}>at Bella."</span>
         </h2>
-        <div className="grid grid-cols-2 gap-6 max-w-3xl">
+        <div className="grid grid-cols-2 gap-6 max-w-4xl">
           {[
             { num: "01", title: "Cold open", desc: "Alex's agent: 'Book me Bella, Friday, party of 4, up to $25.'" },
             { num: "02", title: "Spam demo", desc: "Unpaid call rejected at gate. This is why we built this." },
             { num: "03", title: "ENS resolves", desc: "bella.eth → toll $0.25 USDC. KeeperHub tx confirmed. Modem sweep." },
             { num: "04", title: "AXL negotiation", desc: "Chirps. PROPOSE → ACCEPT. Sub-second. Table Friday 8pm, $20 deposit." },
           ].map(s => (
-            <div key={s.num} className="border rounded-2xl p-6" style={{ borderColor: "rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.02)" }}>
-              <div className="text-xs font-mono mb-2" style={{ color: ACCENT }}>{s.num}</div>
-              <p className="text-white font-semibold text-sm mb-2">{s.title}</p>
-              <p className="text-white/40 text-xs leading-relaxed">{s.desc}</p>
+            <div key={s.num} className="border rounded-2xl p-6"
+              style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.025)" }}>
+              <div className="text-sm font-mono font-bold mb-3" style={{ color: ACCENT }}>{s.num}</div>
+              <p className="text-white font-bold text-lg mb-2">{s.title}</p>
+              <p className="text-white/55 text-sm leading-relaxed">{s.desc}</p>
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-4 text-xs font-mono">
-          {[{ label: "✓ AXL two-node deployment", color: "#00FF88" }, { label: "✓ KeeperHub toll + settlement", color: ACCENT }, { label: "✓ ENS text record resolution", color: "#5298FF" }]
-            .map(b => <span key={b.label} style={{ color: b.color }}>{b.label}</span>)}
+        <div className="flex flex-wrap gap-6 text-sm font-mono">
+          {[
+            { label: "✓ AXL two-node deployment", color: "#00FF88" },
+            { label: "✓ KeeperHub toll + settlement", color: ACCENT },
+            { label: "✓ ENS text record resolution", color: "#5298FF" },
+          ].map(b => <span key={b.label} style={{ color: b.color }}>{b.label}</span>)}
         </div>
       </div>
     ),
@@ -455,8 +519,9 @@ const slides = [
   {
     id: "prizes", label: "07 — Prize Tracks",
     content: (
-      <div className="h-full flex flex-col gap-8">
-        <h2 className="text-5xl font-black leading-none tracking-tighter text-white" style={{ fontFamily: '"Butler", serif' }}>
+      <div className="h-full flex flex-col gap-10">
+        <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter text-white"
+          style={{ fontFamily: '"Butler", serif' }}>
           Three tracks.<br /><span style={{ color: ACCENT }}>$17k exposure.</span>
         </h2>
         <div className="grid grid-cols-3 gap-6">
@@ -465,15 +530,16 @@ const slides = [
             { sponsor: "KeeperHub", prize: "$4,750", color: ACCENT, track: "Best Use + Feedback Bounty", proof: "x402 toll + settlement workflows. Public inbound-toll workflow. FEEDBACK.md." },
             { sponsor: "ENS", prize: "$5,000", color: "#5298FF", track: "Best Integration + Most Creative", proof: "contact.price as novel ENS pattern. Without ENS, there's no directory." },
           ].map(p => (
-            <div key={p.sponsor} className="border rounded-2xl p-6" style={{ borderColor: `${p.color}25`, background: `${p.color}05` }}>
-              <div className="text-3xl font-black mb-1" style={{ fontFamily: '"Butler", serif', color: p.color }}>{p.prize}</div>
-              <div className="text-xs font-mono tracking-widest uppercase mb-3" style={{ color: `${p.color}70` }}>{p.sponsor}</div>
-              <p className="text-white text-sm font-semibold mb-2">{p.track}</p>
-              <p className="text-white/35 text-xs leading-relaxed">{p.proof}</p>
+            <div key={p.sponsor} className="border rounded-2xl p-7"
+              style={{ borderColor: `${p.color}30`, background: `${p.color}08` }}>
+              <div className="text-4xl md:text-5xl font-black mb-2" style={{ fontFamily: '"Butler", serif', color: p.color }}>{p.prize}</div>
+              <div className="text-sm font-mono tracking-widest uppercase mb-4" style={{ color: `${p.color}` }}>{p.sponsor}</div>
+              <p className="text-white text-lg font-bold mb-3">{p.track}</p>
+              <p className="text-white/55 text-sm leading-relaxed">{p.proof}</p>
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-xs font-mono text-white/25">
+        <div className="flex items-center gap-2 text-sm font-mono text-white/40">
           <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: ACCENT }}></span>
           ETHGlobal Open Agents — May 2025
         </div>
@@ -483,24 +549,26 @@ const slides = [
   {
     id: "close", label: "08 — Build with us",
     content: (
-      <div className="flex flex-col items-center justify-center text-center h-full gap-8 relative">
-        <h2 className="text-7xl md:text-8xl font-black tracking-tighter leading-none" style={{ fontFamily: '"Butler", serif', color: ACCENT }}>
+      <div className="flex flex-col items-center justify-center text-center h-full gap-10 relative">
+        <h2 className="text-7xl md:text-9xl font-black tracking-tighter leading-none"
+          style={{ fontFamily: '"Butler", serif', color: ACCENT }}>
           The toll booth<br />is open.
         </h2>
-        <p className="text-xl text-white/50 max-w-xl">
+        <p className="text-2xl text-white/65 max-w-2xl leading-snug">
           Every agent-to-agent call, everywhere, paying its way.
           Tollgate is the primitive the next decade needs.
         </p>
         <div className="flex gap-4 mt-4">
-          <Link to="/app" className="px-8 py-3 text-sm font-bold tracking-widest uppercase text-black transition-colors hover:opacity-90"
+          <Link to="/app" className="px-10 py-4 text-base font-bold tracking-widest uppercase text-black transition-colors hover:opacity-90"
             style={{ background: ACCENT }}>
             Try the demo →
           </Link>
-          <Link to="/create-agent" className="px-8 py-3 text-sm font-bold tracking-widest uppercase border border-white/20 text-white hover:bg-white/5 transition-colors">
+          <Link to="/create-agent"
+            className="px-10 py-4 text-base font-bold tracking-widest uppercase border border-white/25 text-white hover:bg-white/5 transition-colors">
             Create an Agent
           </Link>
         </div>
-        <div className="absolute bottom-8 flex gap-8 text-xs font-mono text-white/20">
+        <div className="absolute bottom-8 flex gap-8 text-sm font-mono text-white/30">
           <span>ENS + KeeperHub + Gensyn AXL</span>
           <span>ETHGlobal Open Agents 2025</span>
         </div>
@@ -605,10 +673,11 @@ export default function Pitch() {
 
       <div ref={containerRef} className="h-screen overflow-y-auto snap-y snap-mandatory" style={{ scrollbarWidth: "none" }}>
         {slides.map((slide, i) => (
-          <section key={slide.id} className="snap-start h-screen flex items-center justify-center px-12 md:px-20 py-16 relative">
-            <div className="w-full max-w-6xl">
+          <section key={slide.id}
+            className="snap-start h-screen flex items-center justify-center px-8 md:px-16 lg:px-20 py-12 relative">
+            <div className="w-full max-w-7xl">
               {slide.label && (
-                <p className="text-xs font-mono tracking-widest uppercase mb-6" style={{ color: ACCENT }}>
+                <p className="text-sm font-mono tracking-widest uppercase mb-8 font-semibold" style={{ color: ACCENT }}>
                   {slide.label}
                 </p>
               )}
