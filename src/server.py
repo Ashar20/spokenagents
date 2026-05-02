@@ -17,9 +17,12 @@ from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from src.ens import agent_registry
+from src.ens.registrar import register_subdomain
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
@@ -160,3 +163,92 @@ async def end_call(body: EndCallBody):
         logger.warning("Room delete failed: %s", exc)
 
     return {"ended": True}
+
+
+# ---------- Agent registry ----------
+
+class RegisterAgentBody(BaseModel):
+    label: str = Field(..., description="Subdomain label, e.g. 'wendy' for wendy.spokenagents.eth")
+    role: str = Field(..., description="caller | callee")
+    axl_node: str = Field(..., description="64-char hex AXL peer id")
+    axl_bridge_url: str
+    wallet: str = Field(..., description="Receiving wallet (callee) or signing wallet (caller)")
+    toll_price: str = ""
+    currency: str = "USDC"
+    workflow_id: str = ""
+    capabilities: list[str] = Field(default_factory=list)
+    parent_domain: str = "spokenagents.eth"
+
+
+@app.post("/api/agents/register")
+async def register_agent(body: RegisterAgentBody):
+    """Create or update an ENS subdomain for the agent + add it to the registry.
+    Idempotent: re-registering the same agent just re-applies any changed text records.
+    """
+    text_records = {
+        "agent.role":       body.role,
+        "axl.node":         body.axl_node,
+        "axl.bridge_url":   body.axl_bridge_url,
+        "contact.wallet":   body.wallet,
+        "contact.currency": body.currency,
+        "agent.version":    "tollgate/0.1",
+    }
+    if body.role == "callee":
+        text_records["contact.price"] = body.toll_price
+        text_records["contact.workflow"] = body.workflow_id
+    if body.capabilities:
+        import json as _json
+        text_records["capabilities"] = _json.dumps(body.capabilities)
+
+    try:
+        result = await asyncio.to_thread(
+            register_subdomain, body.label, text_records, parent=body.parent_domain,
+        )
+    except KeyError as exc:
+        raise HTTPException(500, f"Server missing env var: {exc}")
+    except Exception as exc:
+        raise HTTPException(500, f"ENS registration failed: {exc}")
+
+    agent_registry.add(result.ens_name)
+    return {
+        "ens_name": result.ens_name,
+        "subnode_tx": result.subnode_tx,
+        "text_record_txs": result.text_record_txs,
+    }
+
+
+@app.get("/api/agents")
+async def list_agents(resolved: bool = Query(False, description="If true, return full ENS records")):
+    """List known agents. By default returns just the ENS names; with
+    ?resolved=true, fetches each one's current text records (slower)."""
+    if not resolved:
+        return {"agents": agent_registry.list_names()}
+    entries = await agent_registry.list_resolved()
+    return {"agents": [e.to_dict() for e in entries]}
+
+
+@app.get("/api/agents/find")
+async def find_agents(capability: str = Query(..., description="e.g. 'dining', 'booking'")):
+    """Find registered agents whose ENS capabilities include the given value."""
+    entries = await agent_registry.find_by_capability(capability)
+    return {"capability": capability, "matches": [e.to_dict() for e in entries]}
+
+
+class RegistryAddBody(BaseModel):
+    ens_name: str
+
+
+@app.post("/api/agents/track")
+async def track_agent(body: RegistryAddBody):
+    """Add an existing on-chain ENS name to the local registry without
+    creating a new subdomain. Useful for tracking agents not under our parent."""
+    agent_registry.add(body.ens_name)
+    return {"tracked": body.ens_name}
+
+
+@app.delete("/api/agents/{ens_name}")
+async def untrack_agent(ens_name: str):
+    """Remove an ENS name from the local registry (does NOT touch on-chain records)."""
+    if not agent_registry.remove(ens_name):
+        raise HTTPException(404, f"{ens_name} not in registry")
+    return {"removed": ens_name}

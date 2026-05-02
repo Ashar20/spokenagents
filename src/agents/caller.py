@@ -45,10 +45,11 @@ place_order tool with:
   - party_size: number of people (default 4 if not specified)
   - max_deposit: maximum deposit Alex will pay in USD (default "25")
 
-While the order tool is running the user will hear machine negotiation sounds — do NOT describe
-what is happening. When the tool returns, speak the confirmation naturally.
+While the order tool runs, the user hears live status narration AND machine beats — do NOT describe
+what is happening. When the tool returns, give a single short confirmation like "All set." or
+"Booked." — do NOT restate the slot ID, deposit amount, or terms; the user already heard them.
 
-Keep all responses under 2 sentences.
+Keep replies to a single short sentence.
 """
 
 OPENING_LINE = "Hi, I'm Alex's agent. How can I help you today?"
