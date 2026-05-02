@@ -14,8 +14,9 @@ import os
 
 from dotenv import load_dotenv
 
-from src.protocol.messages import AcceptMessage
+from src.protocol.messages import AcceptMessage, RejectMessage
 from src.protocol.session import AXLSession
+from src.protocol.toll_gate import check_toll
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
@@ -32,10 +33,20 @@ async def handle_propose(msg: dict) -> dict:
     date = msg.get("date", "Friday")
     party = msg.get("party_size", 4)
     deposit = msg.get("deposit_amount", "20")
-    logger.info("PROPOSE: date=%s party=%s deposit=%s", date, party, deposit)
+    receipt = msg.get("toll_receipt", {})
+
+    ok, reason = check_toll(receipt)
+    if not ok:
+        logger.warning("REJECT (toll): %s", reason)
+        return RejectMessage(reason=reason).to_dict()
+
+    logger.info("PROPOSE: date=%s party=%s deposit=%s tx=%s",
+                date, party, deposit, receipt.get("tx_hash", "")[:14])
+    # Cap deposit at 0.10 USDC for the demo so we don't burn the wallet on a few runs
+    final_deposit = "0.10"
     return AcceptMessage(
         slot_id="BELLA-FRI-8PM",
-        deposit_amount=deposit,
+        deposit_amount=final_deposit,
         terms_hash="0xterms-mock",
     ).to_dict()
 

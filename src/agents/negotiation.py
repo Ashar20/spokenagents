@@ -136,8 +136,17 @@ async def run_negotiation(
         await asyncio.sleep(0.3)
 
         async with AXLSession(bridge_url=bridge_url, peer_peer_id=peer_peer_id) as session:
-            # PROPOSE
-            propose = ProposeMessage(date=booking_date, party_size=party_size, deposit_amount=max_deposit)
+            # PROPOSE — carries the toll receipt so Bella can verify before accepting
+            propose = ProposeMessage(
+                date=booking_date,
+                party_size=party_size,
+                deposit_amount=max_deposit,
+                toll_receipt={
+                    "tx_hash": toll_receipt.tx_hash,
+                    "signed_receipt": toll_receipt.signed_receipt,
+                    "status": toll_receipt.status,
+                },
+            )
             await session.send(propose.to_dict())
             await emit("chirp", {"msg_type": "PROPOSE"})
             logger.info("AXL PROPOSE sent: date=%s party=%d deposit=%s", booking_date, party_size, max_deposit)

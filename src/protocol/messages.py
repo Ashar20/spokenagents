@@ -1,6 +1,7 @@
 # src/protocol/messages.py
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class MessageType(str, Enum):
@@ -16,6 +17,7 @@ class ProposeMessage:
     date: str
     party_size: int
     deposit_amount: str
+    toll_receipt: dict[str, Any] = field(default_factory=dict)
     type: str = MessageType.PROPOSE.value
 
     def to_dict(self) -> dict:
