@@ -1,6 +1,39 @@
+import { useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { Link } from "react-router-dom";
 import { TollgateLogo } from "../components/TollgateLogo";
+
+function FitText({ children, className, style }: { children: string; className?: string; style?: React.CSSProperties }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const update = () => {
+      const wrap = wrapRef.current;
+      const text = textRef.current;
+      if (!wrap || !text) return;
+      text.style.fontSize = "100px";
+      const ratio = wrap.clientWidth / text.scrollWidth;
+      text.style.fontSize = `${100 * ratio}px`;
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (wrapRef.current) ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, [children]);
+
+  return (
+    <div ref={wrapRef} style={{ width: "100%", lineHeight: 1, overflow: "hidden" }}>
+      <span
+        ref={textRef}
+        className={className}
+        style={{ ...style, display: "block", whiteSpace: "nowrap", lineHeight: "inherit" }}
+      >
+        {children}
+      </span>
+    </div>
+  );
+}
 
 function Nav() {
   const { login, authenticated, logout } = usePrivy();
@@ -59,16 +92,12 @@ export default function Landing() {
             Build the toll booth with
           </div>
         </div>
-        <h1
-          className="font-black tracking-tighter uppercase select-none leading-none whitespace-nowrap"
-          style={{
-            fontFamily: '"Butler", serif',
-            fontWeight: 900,
-            fontSize: "clamp(4rem, 17.5vw, 22rem)",
-          }}
+        <FitText
+          className="font-black tracking-tighter uppercase select-none"
+          style={{ fontFamily: '"Butler", serif', fontWeight: 900 }}
         >
           TOLLGATE
-        </h1>
+        </FitText>
       </section>
 
       {/* Tagline band */}
