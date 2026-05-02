@@ -24,9 +24,16 @@ import asyncio
 import logging
 import os
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
-load_dotenv()
+# Override stale parent-env vars (e.g. uvicorn's cached BELLA_ENS) with the
+# freshest .env — but only for keys that have a non-empty value in .env, so
+# that runtime-injected vars like DAILY_ROOM_URL (set per call by src/server.py)
+# don't get clobbered by a blank slot.
+load_dotenv()  # first pass: only fill missing
+for k, v in dotenv_values().items():
+    if v:
+        os.environ[k] = v
 logger = logging.getLogger("caller")
 
 SYSTEM_PROMPT = """\
@@ -113,13 +120,27 @@ async def main() -> None:
     context = OpenAILLMContext(messages, tools=tools)
     context_aggregator = llm.create_context_aggregator(context)
 
+    # Map negotiation events → spoken status (queued as TTSSpeakFrame on the
+    # pipeline). Empty value means "no narration, only beats".
+    _NARRATION = {
+        "ens_resolving":         "Looking up the agent's address.",
+        "toll_paying":           "Paying the toll on chain.",
+        "handshake_sweep":       "Connecting to the agent.",
+        "settlement_executing":  "Sending the deposit.",
+        "settlement_done":       "Booking confirmed.",
+    }
+
     class _BeatAudioEmitter:
-        """Bridges negotiation.py's audio_emitter events to BeatInjector beats."""
-        def __init__(self, injector: BeatInjector):
+        """Bridges negotiation events to live audio: spoken status + beats."""
+        def __init__(self, injector: BeatInjector, task: PipelineTask):
             self._injector = injector
+            self._task = task
 
         async def aemit(self, event: str, data=None) -> None:
             data = data or {}
+            text = _NARRATION.get(event)
+            if text:
+                await self._task.queue_frames([TTSSpeakFrame(text)])
             if event == "ens_resolving":
                 await self._injector.play_text_as_beats("resolving ENS", direction="out")
             elif event == "toll_paying":
@@ -145,14 +166,24 @@ async def main() -> None:
 
         logger.info("place_order tool: date=%s party=%d deposit=%s", date, party_size, max_deposit)
 
-        emitter = _BeatAudioEmitter(beat_injector)
+        caller_wallet = os.environ.get("CALLER_WALLET")
+        if not caller_wallet:
+            await result_callback({"error": "CALLER_WALLET env var required"})
+            return
+
+        callee_ens = os.environ.get("BELLA_ENS", "bella.spokenagents.eth")
+        caller_ens = os.environ.get("ALEX_ENS", "alex.spokenagents.eth")
+        logger.info("place_order resolved to: caller_ens=%s callee_ens=%s wallet=%s",
+                    caller_ens, callee_ens, caller_wallet)
+
+        emitter = _BeatAudioEmitter(beat_injector, task)
         result = await run_negotiation(
-            callee_ens=os.environ.get("BELLA_ENS", "bella.spokenagents.eth"),
+            callee_ens=callee_ens,
             booking_date=date,
             party_size=party_size,
             max_deposit=max_deposit,
-            caller_wallet=os.environ.get("CALLER_WALLET", "0x0000"),
-            caller_ens=os.environ.get("ALEX_ENS", "alex.spokenagents.eth"),
+            caller_wallet=caller_wallet,
+            caller_ens=caller_ens,
             audio_emitter=emitter,
         )
 

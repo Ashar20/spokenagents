@@ -67,12 +67,14 @@ async def run_negotiation(
     await emit("ens_resolving", {"name": callee_ens})
     try:
         record = await resolve_agent_records(callee_ens)
-    except Exception as exc:
-        logger.error("ENS resolution failed for %s: %s", callee_ens, exc)
-        # Fall back to env-supplied record so the demo still works without ENS
+    except LookupError as exc:
+        # ENS reachable but the name has no records.
+        # Fall back to env-supplied record only when explicitly enabled.
+        if os.environ.get("ENS_FALLBACK_ENABLED", "false").lower() not in ("true", "1", "yes"):
+            return NegotiationResult(success=False, error=f"ENS lookup empty: {exc}")
         forced_node = os.environ.get("FORCE_BELLA_NODE")
         if not forced_node:
-            return NegotiationResult(success=False, error=f"ENS resolution failed: {exc}")
+            return NegotiationResult(success=False, error=f"ENS lookup empty: {exc}")
         record = AgentRecord(
             role="callee",
             axl_node=os.environ.get("BELLA_PEER_ID", ""),
@@ -83,7 +85,12 @@ async def run_negotiation(
             workflow_id=os.environ.get("TOLLGATE_WORKFLOW_ID", ""),
             capabilities=["dining"],
         )
-        logger.warning("Using fallback Bella record from env vars")
+        logger.warning("Using fallback Bella record from env vars (ENS_FALLBACK_ENABLED)")
+    except Exception as exc:
+        # Anything else (RPC down, web3 bug) — surface so we don't silently
+        # pay a real toll to a stale env-configured wallet.
+        logger.error("ENS resolution error for %s: %s", callee_ens, exc)
+        return NegotiationResult(success=False, error=f"ENS resolution error: {exc}")
 
     timings["ens_resolve"] = time.perf_counter() - t_start
     await emit("ens_resolved", {
@@ -195,8 +202,13 @@ async def run_negotiation(
         else:
             try:
                 settlement = await keeperhub.execute_workflow(
-                    workflow_id=record.workflow_id.replace("inbound-toll", "booking-deposit"),
-                    params={"slot_id": slot_id, "amount": deposit, "terms_hash": terms_hash},
+                    workflow_id=record.workflow_id,
+                    params={
+                        "recipient": record.wallet,
+                        "slot_id": slot_id,
+                        "amount": deposit,
+                        "terms_hash": terms_hash,
+                    },
                     audit_tag=f"tollgate-session-{session_id}",
                 )
             except Exception as exc:

@@ -70,7 +70,7 @@ async def test_ens_failure_returns_error():
             caller_ens="alex.eth",
         )
     assert result.success is False
-    assert "ENS resolution failed" in result.error
+    assert "ENS resolution error" in result.error
 
 
 @pytest.mark.asyncio
