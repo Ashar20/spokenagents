@@ -1,0 +1,6 @@
+Third-party assets from Pixel Agents (MIT License).
+Source: https://github.com/pablodelucca/pixel-agents
+Copyright (c) Pablo de Lucca and contributors — see LICENSE.pixel-agents.
+
+Included: assets/ (characters, default-layout-1.json, floors, furniture, walls),
+characters.png, fonts/
