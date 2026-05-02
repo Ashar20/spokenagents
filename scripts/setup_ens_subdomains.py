@@ -119,20 +119,27 @@ RESOLVER_ABI = [{
 }]
 
 
-def send_tx(w3: Web3, contract, fn_name: str, args: list, nonce: int, label: str) -> str:
+def send_tx(w3: Web3, contract, fn_name: str, args: list, label: str) -> str:
+    """Re-fetch nonce per call so a prior timeout/revert doesn't desync us.
+    `pending` mode skips already-submitted-but-unconfirmed txs.
+    Estimates gas with 20% buffer and uses live gas price.
+    """
     fn = contract.functions[fn_name](*args)
+    nonce = w3.eth.get_transaction_count(ACCT.address, "pending")
+    estimated = fn.estimate_gas({"from": ACCT.address})
+    gas_price = w3.eth.gas_price
     tx = fn.build_transaction({
         "from": ACCT.address,
         "nonce": nonce,
         "chainId": w3.eth.chain_id,
-        "maxFeePerGas": w3.to_wei(20, "gwei"),
+        "maxFeePerGas": int(gas_price * 2),
         "maxPriorityFeePerGas": w3.to_wei(2, "gwei"),
-        "gas": 200_000,
+        "gas": int(estimated * 1.2),
     })
     signed = ACCT.sign_transaction(tx)
     h = w3.eth.send_raw_transaction(signed.raw_transaction)
-    logger.info("  %s sent: %s", label, h.hex())
-    receipt = w3.eth.wait_for_transaction_receipt(h, timeout=120)
+    logger.info("  %s sent: %s (nonce=%d, gas=%d)", label, h.hex(), nonce, tx["gas"])
+    receipt = w3.eth.wait_for_transaction_receipt(h, timeout=180)
     if receipt.status != 1:
         raise RuntimeError(f"{label} reverted: {receipt}")
     logger.info("  %s confirmed in block %s", label, receipt.blockNumber)
@@ -150,8 +157,6 @@ def main():
     registry = w3.eth.contract(address=Web3.to_checksum_address(ENS_REGISTRY), abi=REGISTRY_ABI)
     resolver = w3.eth.contract(address=Web3.to_checksum_address(PUBLIC_RESOLVER), abi=RESOLVER_ABI)
 
-    nonce = w3.eth.get_transaction_count(ACCT.address)
-
     # Step 1 — create subdomains via setSubnodeRecord
     logger.info("\n--- Creating subdomains ---")
     for label in SUBDOMAINS:
@@ -167,11 +172,10 @@ def main():
             w3, registry, "setSubnodeRecord",
             [parent_node, keccak(label.encode()), ACCT.address,
              Web3.to_checksum_address(PUBLIC_RESOLVER), 0],
-            nonce=nonce, label=f"setSubnodeRecord({full})",
+            label=f"setSubnodeRecord({full})",
         )
-        nonce += 1
 
-    # Step 2 — set text records
+    # Step 2 — set text records (idempotent: skip if already set to same value)
     logger.info("\n--- Setting text records ---")
     for label, records in SUBDOMAINS.items():
         full = f"{label}.{PARENT}"
@@ -180,12 +184,15 @@ def main():
         for key, value in records.items():
             if not value:
                 continue
+            current = resolver.functions.text(sub_node, key).call()
+            if current == value:
+                logger.info("    %s already set to %r, skipping", key, value)
+                continue
             send_tx(
                 w3, resolver, "setText",
                 [sub_node, key, value],
-                nonce=nonce, label=f"setText({label}.{key})",
+                label=f"setText({label}.{key})",
             )
-            nonce += 1
 
     # Step 3 — verify
     logger.info("\n--- Verifying ---")

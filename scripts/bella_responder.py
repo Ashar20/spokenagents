@@ -3,7 +3,7 @@ Bella AXL responder for the Tollgate demo.
 
 On every incoming PROPOSE:
   1. Verify the toll receipt (status=confirmed + non-empty tx_hash).
-  2. Resolve the caller's ENS name to an AgentRecord.
+  2. Resolve the caller's ENS name to an AgentRecord (5-min cached).
   3. Reject unless agent.role == "caller".
   4. ACCEPT with a small fixed deposit so the demo wallet doesn't drain.
 
@@ -13,10 +13,11 @@ Run alongside the AXL nodes:
 import asyncio
 import logging
 import os
+import time
 
 from dotenv import load_dotenv
 
-from src.ens.resolver import resolve_agent_records
+from src.ens.resolver import AgentRecord, resolve_agent_records
 from src.protocol.messages import AcceptMessage, RejectMessage
 from src.protocol.session import AXLSession
 from src.protocol.toll_gate import check_toll
@@ -31,15 +32,40 @@ ALEX_PEER_ID = os.environ.get("ALEX_PEER_ID", "")
 if not ALEX_PEER_ID:
     raise SystemExit("ALEX_PEER_ID env var required (Alex's 64-char hex public key)")
 
+# Tiny ENS cache so a transient RPC blip during a demo doesn't reject Alex
+# right after we successfully resolved him. (key, fetched_at, record)
+_ENS_CACHE: dict[str, tuple[float, AgentRecord]] = {}
+_ENS_CACHE_TTL = 5 * 60  # seconds
+
 
 async def verify_caller_ens(caller_ens: str) -> tuple[bool, str]:
-    """Resolve the caller's ENS record. Reject unknown or non-caller roles."""
+    """Resolve the caller's ENS record. Distinguish transient errors from
+    permanent ones (unknown name / wrong role) so we don't reject good
+    callers when the RPC blips."""
     if not caller_ens:
         return False, "no caller_ens supplied"
+
+    cached = _ENS_CACHE.get(caller_ens.lower())
+    if cached and time.time() - cached[0] < _ENS_CACHE_TTL:
+        rec = cached[1]
+        if rec.role != "caller":
+            return False, f"agent.role={rec.role!r} (expected 'caller')"
+        return True, f"verified caller={caller_ens} (cached)"
+
     try:
         rec = await resolve_agent_records(caller_ens)
-    except Exception as exc:
-        return False, f"ENS lookup failed for {caller_ens}: {exc}"
+    except LookupError:
+        return False, f"ENS name {caller_ens} has no agent records"
+    except (ConnectionError, Exception) as exc:
+        # Transient: if we have ANY cached record we accept-with-warning;
+        # otherwise reject (we can't validate)
+        if cached:
+            logger.warning("ENS RPC down (%s) — using stale cache for %s", exc, caller_ens)
+            rec = cached[1]
+        else:
+            return False, f"ENS lookup transient failure: {exc}"
+
+    _ENS_CACHE[caller_ens.lower()] = (time.time(), rec)
     if rec.role != "caller":
         return False, f"agent.role={rec.role!r} (expected 'caller')"
     return True, f"verified caller={caller_ens} wallet={rec.wallet}"
