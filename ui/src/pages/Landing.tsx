@@ -50,7 +50,7 @@ export default function Landing() {
       <Nav />
 
       {/* Hero — full viewport orange */}
-      <section className="relative min-h-screen bg-[#FF3300] text-black flex flex-col justify-end overflow-hidden">
+      <section className="relative min-h-screen bg-[#FF3300] text-black flex flex-col justify-end overflow-x-hidden">
         <div className="px-8 pb-0 pt-32">
           <p className="text-sm font-medium tracking-widest uppercase mb-6 opacity-70">
             ETHGlobal Open Agents — 2025
@@ -59,14 +59,16 @@ export default function Landing() {
             Build the toll booth with
           </div>
         </div>
-        <div className="overflow-hidden">
-          <h1
-            className="text-[22vw] leading-[0.82] font-black tracking-tighter uppercase select-none"
-            style={{ fontFamily: '"Butler", serif', fontWeight: 900 }}
-          >
-            TOLLGATE
-          </h1>
-        </div>
+        <h1
+          className="font-black tracking-tighter uppercase select-none leading-none whitespace-nowrap"
+          style={{
+            fontFamily: '"Butler", serif',
+            fontWeight: 900,
+            fontSize: "clamp(4rem, 17.5vw, 22rem)",
+          }}
+        >
+          TOLLGATE
+        </h1>
       </section>
 
       {/* Tagline band */}
