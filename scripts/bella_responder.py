@@ -1,12 +1,14 @@
 """
-Minimal Bella AXL responder for the single-agent demo.
+Bella AXL responder for the Tollgate demo.
 
-Listens on Bella's AXL bridge for incoming PROPOSE messages from Alex and replies
-with ACCEPT. Optionally publishes audio events to ws://localhost:8765 so the demo
-UI can show what Bella's side sees.
+On every incoming PROPOSE:
+  1. Verify the toll receipt (status=confirmed + non-empty tx_hash).
+  2. Resolve the caller's ENS name to an AgentRecord.
+  3. Reject unless agent.role == "caller".
+  4. ACCEPT with a small fixed deposit so the demo wallet doesn't drain.
 
 Run alongside the AXL nodes:
-  python -m scripts.bella_responder
+  .venv/bin/python -m scripts.bella_responder
 """
 import asyncio
 import logging
@@ -14,6 +16,7 @@ import os
 
 from dotenv import load_dotenv
 
+from src.ens.resolver import resolve_agent_records
 from src.protocol.messages import AcceptMessage, RejectMessage
 from src.protocol.session import AXLSession
 from src.protocol.toll_gate import check_toll
@@ -29,24 +32,46 @@ if not ALEX_PEER_ID:
     raise SystemExit("ALEX_PEER_ID env var required (Alex's 64-char hex public key)")
 
 
-async def handle_propose(msg: dict) -> dict:
-    date = msg.get("date", "Friday")
-    party = msg.get("party_size", 4)
-    deposit = msg.get("deposit_amount", "20")
-    receipt = msg.get("toll_receipt", {})
+async def verify_caller_ens(caller_ens: str) -> tuple[bool, str]:
+    """Resolve the caller's ENS record. Reject unknown or non-caller roles."""
+    if not caller_ens:
+        return False, "no caller_ens supplied"
+    try:
+        rec = await resolve_agent_records(caller_ens)
+    except Exception as exc:
+        return False, f"ENS lookup failed for {caller_ens}: {exc}"
+    if rec.role != "caller":
+        return False, f"agent.role={rec.role!r} (expected 'caller')"
+    return True, f"verified caller={caller_ens} wallet={rec.wallet}"
 
+
+async def handle_propose(msg: dict) -> dict:
+    receipt = msg.get("toll_receipt", {})
+    caller_ens = msg.get("caller_ens", "")
+
+    # Toll receipt must be present and confirmed
     ok, reason = check_toll(receipt)
     if not ok:
         logger.warning("REJECT (toll): %s", reason)
         return RejectMessage(reason=reason).to_dict()
 
-    logger.info("PROPOSE: date=%s party=%s deposit=%s tx=%s",
-                date, party, deposit, receipt.get("tx_hash", "")[:14])
-    # Cap deposit at 0.10 USDC for the demo so we don't burn the wallet on a few runs
-    final_deposit = "0.10"
+    # Caller must be a known agent in the registry
+    ok, reason = await verify_caller_ens(caller_ens)
+    if not ok:
+        logger.warning("REJECT (registry): %s", reason)
+        return RejectMessage(reason=reason).to_dict()
+
+    date = msg.get("date", "Friday")
+    party = msg.get("party_size", 4)
+    deposit = msg.get("deposit_amount", "20")
+    logger.info(
+        "PROPOSE accepted: caller=%s date=%s party=%s deposit=%s tx=%s…",
+        caller_ens, date, party, deposit, receipt.get("tx_hash", "")[:14],
+    )
+    # Cap deposit so the demo wallet doesn't drain in a few runs
     return AcceptMessage(
         slot_id="BELLA-FRI-8PM",
-        deposit_amount=final_deposit,
+        deposit_amount="0.10",
         terms_hash="0xterms-mock",
     ).to_dict()
 
@@ -72,7 +97,7 @@ async def main() -> None:
             if mtype == "PROPOSE":
                 reply = await handle_propose(msg)
                 await session.send(reply)
-                logger.info("Bella sent ACCEPT: slot=%s", reply.get("slot_id"))
+                logger.info("Bella sent: %s", reply.get("type"))
             elif mtype == "CONFIRM":
                 logger.info("Booking confirmed by Alex: slot=%s", msg.get("slot_id"))
             else:

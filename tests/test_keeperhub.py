@@ -5,27 +5,29 @@ from src.payments.keeperhub import KeeperHubClient, TollPaymentRequest
 from src.payments.receipt import Receipt, verify_receipt
 
 
-def _make_client(monkeypatch) -> KeeperHubClient:
-    monkeypatch.setenv("BELLA_WALLET_ADDRESS", "0xBella")
-    return KeeperHubClient(api_key="test-key", mcp_url="http://mock")
+def _toll_req(**overrides) -> TollPaymentRequest:
+    base = dict(
+        workflow_id="bella/inbound-toll",
+        amount="0.25",
+        currency="USDC",
+        from_wallet="0xAlex",
+        to_wallet="0xBella",
+        metadata={"purpose": "inbound_channel", "caller_ens": "alex.eth"},
+    )
+    base.update(overrides)
+    return TollPaymentRequest(**base)
 
 
 @pytest.mark.asyncio
-async def test_pay_workflow_returns_confirmed_receipt(monkeypatch):
-    client = _make_client(monkeypatch)
+async def test_pay_workflow_returns_confirmed_receipt():
+    client = KeeperHubClient(api_key="test-key", mcp_url="http://mock")
     mock = {
         "executionId": "exec_1",
         "status": "completed",
         "transactionHash": "0xabc123",
     }
     with patch.object(client, "_call_tool", new_callable=AsyncMock, return_value=mock):
-        receipt = await client.pay_workflow(TollPaymentRequest(
-            workflow_id="ignored",
-            amount="0.25",
-            currency="USDC",
-            from_wallet="0xAlexWallet",
-            caller_ens="alex.eth",
-        ))
+        receipt = await client.pay_workflow(_toll_req())
     assert receipt.tx_hash == "0xabc123"
     assert receipt.status == "confirmed"
     assert receipt.signed_receipt == "exec_1"
@@ -33,7 +35,8 @@ async def test_pay_workflow_returns_confirmed_receipt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_execute_workflow_returns_receipt(monkeypatch):
-    client = _make_client(monkeypatch)
+    monkeypatch.setenv("BELLA_WALLET_ADDRESS", "0xBella")
+    client = KeeperHubClient(api_key="test-key", mcp_url="http://mock")
     mock = {
         "executionId": "exec_2",
         "status": "completed",
@@ -70,23 +73,17 @@ def test_verify_receipt_rejects_failed():
 
 
 @pytest.mark.asyncio
-async def test_pay_workflow_calls_execute_transfer_with_correct_args(monkeypatch):
-    monkeypatch.setenv("BELLA_WALLET_ADDRESS", "0xBella")
+async def test_pay_workflow_routes_to_recipient(monkeypatch):
     monkeypatch.setenv("KH_CHAIN_ID", "11155111")
     client = KeeperHubClient(api_key="test-key", mcp_url="http://mock")
     mock = {"executionId": "x", "status": "completed", "transactionHash": "0x1"}
 
     with patch.object(client, "_call_tool", new_callable=AsyncMock, return_value=mock) as call:
-        await client.pay_workflow(TollPaymentRequest(
-            workflow_id="ignored",
-            amount="0.25",
-            currency="USDC",
-            from_wallet="0xAlex",
-            caller_ens="alex.eth",
-        ))
+        await client.pay_workflow(_toll_req(to_wallet="0xBellaSpecific"))
 
-    name, args = call.call_args[0]
-    assert name == "execute_transfer"
-    assert args["network"] == "11155111"
-    assert args["recipient_address"] == "0xBella"
-    assert args["amount"] == "0.25"
+    # First call is execute_transfer; subsequent calls are get_direct_execution_status polls.
+    first_name, first_args = call.call_args_list[0][0]
+    assert first_name == "execute_transfer"
+    assert first_args["network"] == "11155111"
+    assert first_args["recipient_address"] == "0xBellaSpecific"
+    assert first_args["amount"] == "0.25"
