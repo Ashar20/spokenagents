@@ -7,23 +7,27 @@ function FitText({ children, className, style }: { children: string; className?:
   const wrapRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
 
+  const fit = () => {
+    const wrap = wrapRef.current;
+    const text = textRef.current;
+    if (!wrap || !text) return;
+    // Use a large baseline size, measure actual rendered rect, scale to container
+    text.style.fontSize = "300px";
+    const containerW = wrap.getBoundingClientRect().width;
+    const textW = text.getBoundingClientRect().width;
+    if (textW > 0) text.style.fontSize = `${(containerW / textW) * 300}px`;
+  };
+
   useEffect(() => {
-    const update = () => {
-      const wrap = wrapRef.current;
-      const text = textRef.current;
-      if (!wrap || !text) return;
-      text.style.fontSize = "100px";
-      const ratio = wrap.clientWidth / text.scrollWidth;
-      text.style.fontSize = `${100 * ratio}px`;
-    };
-    update();
-    const ro = new ResizeObserver(update);
+    // Run after fonts are loaded so Butler metrics are correct
+    document.fonts.ready.then(fit);
+    const ro = new ResizeObserver(fit);
     if (wrapRef.current) ro.observe(wrapRef.current);
     return () => ro.disconnect();
-  }, [children]);
+  }, []);
 
   return (
-    <div ref={wrapRef} style={{ width: "100%", lineHeight: 1, overflow: "hidden" }}>
+    <div ref={wrapRef} style={{ width: "100%", lineHeight: 1 }}>
       <span
         ref={textRef}
         className={className}
@@ -92,12 +96,22 @@ export default function Landing() {
             Build the toll booth with
           </div>
         </div>
-        <FitText
-          className="font-black tracking-tighter uppercase select-none"
-          style={{ fontFamily: '"Butler", serif', fontWeight: 900 }}
-        >
-          TOLLGATE
-        </FitText>
+        <div className="relative">
+          <FitText
+            className="font-black tracking-tighter uppercase select-none"
+            style={{ fontFamily: '"Butler", serif', fontWeight: 900 }}
+          >
+            TOLLGATE
+          </FitText>
+          {/* Bottom-up fade: orange solid → transparent, sits over the text */}
+          <div
+            className="absolute bottom-0 left-0 right-0 pointer-events-none"
+            style={{
+              height: "45%",
+              background: "linear-gradient(to top, #FF3300 0%, transparent 100%)",
+            }}
+          />
+        </div>
       </section>
 
       {/* Tagline band */}
