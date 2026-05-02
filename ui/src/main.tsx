@@ -8,7 +8,7 @@ import "./styles/globals.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <PrivyProvider
-      appId={import.meta.env.VITE_PRIVY_APP_ID}
+      appId="cmoolb2m6005p0ckys363pfkv"
       config={{
         appearance: {
           theme: "dark",
