@@ -8,16 +8,18 @@ interface TraceEvent {
   data: Record<string, unknown>;
 }
 
+const ACCENT = "#FF3300";
+
 const EVENT_COLORS: Record<string, string> = {
-  ens_resolving: "#6B7280",
-  ens_resolved: "#10B981",
-  toll_paying: "#F59E0B",
-  toll_paid: "#10B981",
-  handshake_sweep: "#8B5CF6",
-  chirp: "#3B82F6",
-  settlement_executing: "#F59E0B",
-  settlement_done: "#10B981",
-  default: "#9CA3AF",
+  ens_resolving: "rgba(82,152,255,0.6)",
+  ens_resolved: "#5298FF",
+  toll_paying: ACCENT,
+  toll_paid: "#FF3300",
+  handshake_sweep: "#FFD700",
+  chirp: "#00FF88",
+  settlement_executing: ACCENT,
+  settlement_done: "#00FF88",
+  default: "rgba(255,255,255,0.5)",
 };
 
 const EVENT_LABELS: Record<string, string> = {
@@ -34,7 +36,7 @@ const EVENT_LABELS: Record<string, string> = {
 export function TracePanel({ wsUrl }: { wsUrl: string }) {
   const [events, setEvents] = useState<TraceEvent[]>([]);
   const [connected, setConnected] = useState(false);
-  const [status, setStatus] = useState("Waiting for agent call...");
+  const [status, setStatus] = useState("Waiting for agent call…");
   const counterRef = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -55,9 +57,9 @@ export function TracePanel({ wsUrl }: { wsUrl: string }) {
           const data = JSON.parse(msg.data as string) as Record<string, unknown>;
           const eventType = (data.event as string) ?? "unknown";
 
-          if (eventType === "ens_resolving") setStatus("Resolving ENS...");
-          else if (eventType === "toll_paid") setStatus("Toll paid — opening AXL channel...");
-          else if (eventType === "handshake_sweep") setStatus("AXL handshake...");
+          if (eventType === "ens_resolving") setStatus("Resolving ENS…");
+          else if (eventType === "toll_paid") setStatus("Toll paid — opening AXL channel…");
+          else if (eventType === "handshake_sweep") setStatus("AXL handshake…");
           else if (eventType === "settlement_done") setStatus("Done — table booked!");
 
           setEvents((prev) => [
@@ -88,12 +90,12 @@ export function TracePanel({ wsUrl }: { wsUrl: string }) {
 
       ws.onerror = () => {
         setConnected(false);
-        setStatus("WebSocket error — retrying...");
+        setStatus("WebSocket error — retrying…");
       };
 
       ws.onclose = () => {
         setConnected(false);
-        setStatus("Disconnected — retrying in 3s...");
+        setStatus("Disconnected — retrying in 3s…");
         retryTimeout = setTimeout(connect, 3000);
       };
     }
@@ -111,58 +113,42 @@ export function TracePanel({ wsUrl }: { wsUrl: string }) {
   }, [events]);
 
   return (
-    <div style={{ padding: "0 16px" }}>
+    <div>
       {/* Status bar */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          marginBottom: 16,
-          padding: "8px 12px",
-          background: "#1F2937",
-          borderRadius: 6,
-        }}
-      >
+      <div className="flex items-center gap-3 px-5 py-3 mb-4 rounded-2xl border border-white/10 bg-white/[0.02]">
         <div
+          className="w-2 h-2 rounded-full shrink-0"
           style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: connected ? "#10B981" : "#EF4444",
+            background: connected ? "#00FF88" : ACCENT,
+            boxShadow: connected ? "0 0 8px #00FF88" : `0 0 8px ${ACCENT}`,
           }}
         />
-        <span style={{ color: "#D1D5DB", fontSize: 13 }}>{status}</span>
+        <span className="text-sm text-white/65 font-mono flex-1">{status}</span>
+        <span
+          className="text-xs font-mono tracking-widest uppercase"
+          style={{ color: connected ? "#00FF88" : ACCENT }}
+        >
+          {connected ? "● LIVE" : "○ OFFLINE"}
+        </span>
       </div>
 
       {/* Event log */}
-      <div
-        style={{
-          fontFamily: "monospace",
-          fontSize: 13,
-          maxHeight: 500,
-          overflowY: "auto",
-          background: "#111827",
-          borderRadius: 6,
-          padding: 12,
-        }}
-      >
+      <div className="rounded-2xl border border-white/10 bg-black/40 p-5 font-mono text-sm max-h-[480px] overflow-y-auto">
         {events.length === 0 ? (
-          <div style={{ color: "#4B5563" }}>No events yet. Start the agent call to see the trace.</div>
+          <div className="text-white/30 italic">
+            No events yet. Start the agent call to see ENS → toll → AXL → settlement.
+          </div>
         ) : (
           events.map((e) => (
-            <div key={e.id} style={{ marginBottom: 6, display: "flex", gap: 12 }}>
-              <span style={{ color: "#6B7280", minWidth: 90 }}>{e.time}</span>
+            <div key={e.id} className="flex gap-4 py-1.5 border-b border-white/[0.04] last:border-0">
+              <span className="text-white/30 shrink-0 w-24">{e.time}</span>
               <span
-                style={{
-                  color: EVENT_COLORS[e.event] ?? EVENT_COLORS.default,
-                  minWidth: 140,
-                  fontWeight: 600,
-                }}
+                className="shrink-0 w-36 font-bold"
+                style={{ color: EVENT_COLORS[e.event] ?? EVENT_COLORS.default }}
               >
                 {EVENT_LABELS[e.event] ?? e.event}
               </span>
-              <span style={{ color: "#9CA3AF" }}>
+              <span className="text-white/45 truncate">
                 {Object.entries(e.data)
                   .filter(([k]) => k !== "event")
                   .map(([k, v]) => `${k}=${JSON.stringify(v)}`)

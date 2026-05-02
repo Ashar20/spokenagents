@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import DailyIframe, { DailyCall } from "@daily-co/daily-js";
 
 const API_BASE = "http://localhost:8080";
+const ACCENT = "#FF3300";
 
 interface CallSession {
   call_id: string;
@@ -32,16 +33,15 @@ export function CallFrame() {
       const session = (await resp.json()) as CallSession;
       sessionRef.current = session;
 
-      // Give Alex a moment to join the room first
       await new Promise((r) => setTimeout(r, 1500));
 
       if (!containerRef.current) throw new Error("no container");
       const call = DailyIframe.createFrame(containerRef.current, {
         iframeStyle: {
           width: "100%",
-          height: "320px",
+          height: "360px",
           border: "0",
-          borderRadius: "8px",
+          borderRadius: "16px",
         },
         showLeaveButton: true,
         showFullscreenButton: false,
@@ -81,69 +81,49 @@ export function CallFrame() {
   }
 
   const dotColor =
-    state === "joined" ? "#10B981" : state === "starting" ? "#F59E0B" : "#6B7280";
+    state === "joined" ? "#00FF88" : state === "starting" ? ACCENT : "rgba(255,255,255,0.25)";
   const statusText =
     state === "joined"
       ? "Connected — speak to Alex"
       : state === "starting"
-      ? "Spawning Alex agent..."
+      ? "Spawning Alex agent…"
       : state === "ending"
-      ? "Ending call..."
+      ? "Ending call…"
       : "Click to start a fresh call with Alex";
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div
-        style={{
-          padding: "12px",
-          background: "#1F2937",
-          borderRadius: 8,
-          marginBottom: 12,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-        }}
-      >
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor }} />
-        <span style={{ color: "#D1D5DB", fontSize: 13, flex: 1 }}>{statusText}</span>
+    <div className="mb-4">
+      <div className="flex items-center gap-3 px-5 py-4 mb-3 rounded-2xl border border-white/10 bg-white/[0.02]">
+        <div
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{
+            background: dotColor,
+            boxShadow: state === "joined" ? "0 0 8px #00FF88" : state === "starting" ? `0 0 8px ${ACCENT}` : "none",
+          }}
+        />
+        <span className="text-sm text-white/65 flex-1 font-mono">{statusText}</span>
         {state === "idle" && (
           <button
             onClick={start}
-            style={{
-              background: "#3B82F6",
-              color: "white",
-              border: "0",
-              padding: "8px 16px",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
+            className="bg-[#FF3300] text-black px-5 py-2 text-xs font-bold tracking-widest uppercase hover:bg-[#cc2900] transition-colors rounded-lg"
           >
-            Call Alex
+            Call Alex →
           </button>
         )}
         {state === "joined" && (
           <button
             onClick={() => endCall(true)}
-            style={{
-              background: "#EF4444",
-              color: "white",
-              border: "0",
-              padding: "8px 16px",
-              borderRadius: 6,
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 600,
-            }}
+            className="border border-white/20 text-white/80 px-5 py-2 text-xs font-bold tracking-widest uppercase hover:bg-white/5 transition-colors rounded-lg"
           >
             End
           </button>
         )}
       </div>
-      <div ref={containerRef} style={{ width: "100%" }} />
+      <div ref={containerRef} className="w-full" />
       {error && (
-        <div style={{ color: "#EF4444", fontSize: 13, marginTop: 8 }}>Error: {error}</div>
+        <div className="mt-2 px-4 py-2 rounded-lg border border-[#FF3300]/30 bg-[#FF3300]/5 text-[#FF3300] text-sm font-mono">
+          Error: {error}
+        </div>
       )}
     </div>
   );
