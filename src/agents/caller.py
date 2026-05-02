@@ -100,7 +100,9 @@ async def main() -> None:
         voice="aura-asteria-en",
     )
 
-    beat_injector = BeatInjector(sample_rate=16000, tone_ms=200, gap_ms=250)
+    # Per-letter mode (defaults: 24kHz, 150ms tone, 30ms gap → ~5.5 tones/sec).
+    # E.g. "PROPOSE" = 7 distinct rapid tones instead of one chunky word-tone.
+    beat_injector = BeatInjector()
 
     # --- LLM context + tool definition ---
     place_order_tool = FunctionSchema(
@@ -122,8 +124,7 @@ async def main() -> None:
     context = OpenAILLMContext(messages, tools=tools)
     context_aggregator = llm.create_context_aggregator(context)
 
-    # Map negotiation events → spoken status (queued as TTSSpeakFrame on the
-    # pipeline). Empty value means "no narration, only beats".
+    # Spoken status (TTSSpeakFrame). Empty/missing = beats only.
     _NARRATION = {
         "ens_resolving":         "Looking up the agent's address.",
         "toll_paying":           "Paying the toll on chain.",
@@ -131,6 +132,31 @@ async def main() -> None:
         "settlement_executing":  "Sending the deposit.",
         "settlement_done":       "Booking confirmed.",
     }
+
+    def _beat_phrase(event: str, data: dict) -> tuple[str, str]:
+        """Build the data-rich beat phrase + waveform direction for an event.
+        Each non-whitespace char becomes a 100 ms tone, so e.g. a 14-char
+        tx-hash prefix plays as ~1.7 s of distinct frequencies."""
+        d = data or {}
+        if event == "ens_resolving":
+            return f"resolve {d.get('name', '')}", "out"
+        if event == "ens_resolved":
+            return f"found {d.get('wallet', '')[:14]}", "in"
+        if event == "toll_paying":
+            return f"pay {d.get('amount', '0')} usdc", "out"
+        if event == "toll_paid":
+            return f"toll tx {d.get('tx_hash', '')[:18]}", "in"
+        if event == "handshake_sweep":
+            return "axl handshake", "out"
+        if event == "chirp":
+            msg_type = d.get("msg_type", "msg")
+            direction = "in" if msg_type in ("ACCEPT", "COUNTER") else "out"
+            return msg_type.lower(), direction
+        if event == "settlement_executing":
+            return f"settle {d.get('deposit', '0')} usdc", "out"
+        if event == "settlement_done":
+            return f"settled tx {d.get('tx_hash', '')[:18]}", "in"
+        return "", "out"
 
     class _BeatAudioEmitter:
         """Bridges negotiation events to live audio + the trace WS for the canvas."""
@@ -146,23 +172,12 @@ async def main() -> None:
                     await self._ws.aemit(event, data)
                 except Exception as exc:
                     logger.debug("trace WS emit failed: %s", exc)
-            text = _NARRATION.get(event)
-            if text:
-                await self._task.queue_frames([TTSSpeakFrame(text)])
-            if event == "ens_resolving":
-                await self._injector.play_text_as_beats("resolving ENS", direction="out")
-            elif event == "toll_paying":
-                await self._injector.play_text_as_beats("paying toll", direction="out")
-            elif event == "handshake_sweep":
-                await self._injector.play_text_as_beats("connecting", direction="out")
-            elif event == "chirp":
-                msg_type = data.get("msg_type", "MESSAGE")
-                direction = "in" if msg_type in ("ACCEPT", "COUNTER") else "out"
-                await self._injector.play_text_as_beats(msg_type, direction=direction)
-            elif event == "settlement_executing":
-                await self._injector.play_text_as_beats("settling payment", direction="out")
-            elif event == "settlement_done":
-                await self._injector.play_text_as_beats("done", direction="in")
+            narration = _NARRATION.get(event)
+            if narration:
+                await self._task.queue_frames([TTSSpeakFrame(narration)])
+            phrase, direction = _beat_phrase(event, data)
+            if phrase:
+                await self._injector.play_text_as_beats(phrase, direction=direction)
 
     # --- Tool handler ---
     async def handle_place_order(
