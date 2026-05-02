@@ -1,16 +1,24 @@
 # src/agents/caller.py
 """
-Alex's caller agent — initiates the booking call to Bella.
+Alex's caller agent — Pipecat STT→Gemini→TTS pipeline with AXL beat sonification.
 
 Prerequisites:
-  1. Set in .env: LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, OPENAI_API_KEY
-  2. Create a LiveKit Cloud project at https://cloud.livekit.io (free tier)
-  3. Install voice deps: pip install "livekit-agents[openai]>=0.8"
-  4. Start Bella's callee agent first in a separate terminal
-  5. Run this agent: python -m src.agents.caller dev
+  Set in .env:
+    DAILY_ROOM_URL       - Daily.co room URL
+    DAILY_TOKEN          - Daily meeting token (optional for dev)
+    DEEPGRAM_API_KEY     - Deepgram STT
+    GOOGLE_API_KEY       - Google AI Studio (Gemini LLM + Cloud TTS)
+    ALEX_AXL_NODE        - AXL bridge URL (default http://127.0.0.1:9002)
+    RPC_URL              - Ethereum RPC for ENS lookup
+    CALLER_WALLET        - Alex's wallet address
+    CALLER_ENS           - Alex's ENS name (e.g. alex.eth)
 
-Both agents must join the same LiveKit room (default: "tollgate-demo").
-The caller speaks first.
+Flow:
+  1. User speaks intent ("order food from Bella")
+  2. Gemini LLM calls the place_order tool
+  3. Tool runs ENS lookup → toll → AXL negotiation
+  4. Each AXL message is sonified as frequency beats over Daily
+  5. LLM speaks the booking confirmation
 """
 import asyncio
 import logging
@@ -21,52 +29,168 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger("caller")
 
-ROOM_NAME = os.environ.get("LIVEKIT_ROOM", "tollgate-demo")
-
 SYSTEM_PROMPT = """\
-You are Alex's personal voice assistant making a phone call to Bella restaurant.
-Your ONLY goal: book a table for Friday, party of 4, maximum $25 deposit.
+You are Alex's personal AI phone agent. Your job is to help Alex order food or make reservations.
 
-Rules:
-- Introduce yourself immediately: "Hi, I'm an AI agent calling on behalf of Alex."
-- Ask for a Friday table for 4 people.
-- Accept any time slot with deposit ≤ $25.
-- Once the other party confirms a slot and deposit, say exactly: "Deal confirmed. Table for 4 on [slot], $[amount] deposit."
-- Keep all responses under 2 sentences.
-- If the other party is not a restaurant agent, politely end the call.
+When the user asks you to order food from Bella (or any similar request), immediately call the
+place_order tool with:
+  - date: the requested date (default "Friday" if not specified)
+  - party_size: number of people (default 4 if not specified)
+  - max_deposit: maximum deposit Alex will pay in USD (default "25")
+
+While the order tool is running the user will hear machine negotiation sounds — do NOT describe
+what is happening. When the tool returns, speak the confirmation naturally.
+
+Keep all responses under 2 sentences.
 """
 
+OPENING_LINE = "Hi, I'm Alex's agent. How can I help you today?"
 
-async def entrypoint(ctx):
-    from livekit.agents import AutoSubscribe
-    from livekit.agents.voice_assistant import VoiceAssistant
-    from livekit.agents import llm as agents_llm
-    from livekit.plugins import openai, silero
 
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-    logger.info("Caller agent connected to room: %s", ROOM_NAME)
+async def main() -> None:
+    from pipecat.audio.vad.silero import SileroVADAnalyzer
+    from pipecat.frames.frames import TTSSpeakFrame
+    from pipecat.pipeline.pipeline import Pipeline
+    from pipecat.pipeline.runner import PipelineRunner
+    from pipecat.pipeline.task import PipelineParams, PipelineTask
+    from pipecat.adapters.schemas.function_schema import FunctionSchema
+    from pipecat.adapters.schemas.tools_schema import ToolsSchema
+    from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+    from pipecat.services.deepgram.stt import DeepgramSTTService
+    from pipecat.services.deepgram.tts import DeepgramTTSService
+    from pipecat.services.google.llm import GoogleLLMService
+    from pipecat.transports.services.daily import DailyParams, DailyTransport
 
-    assistant = VoiceAssistant(
-        vad=silero.VAD.load(),
-        stt=openai.STT(),
-        llm=openai.LLM(model="gpt-4o-mini"),
-        tts=openai.TTS(),
-        chat_ctx=agents_llm.ChatContext().append(role="system", text=SYSTEM_PROMPT),
+    from src.agents.beat_injector import BeatInjector
+    from src.agents.negotiation import run_negotiation
+
+    # --- Transport ---
+    transport = DailyTransport(
+        os.environ["DAILY_ROOM_URL"],
+        os.environ.get("DAILY_TOKEN"),
+        "Alex (Caller)",
+        DailyParams(
+            audio_out_enabled=True,
+            audio_in_enabled=True,
+            vad_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(),
+            vad_audio_passthrough=True,
+        ),
     )
-    assistant.start(ctx.room)
 
-    # Wait a moment for Bella's agent to be ready, then speak first
-    await asyncio.sleep(2)
-    await assistant.say(
-        "Hi, I'm an AI agent calling on behalf of Alex. "
-        "I'd like to book a table for Friday, party of 4.",
-        allow_interruptions=True,
+    # --- STT / LLM / TTS ---
+    stt = DeepgramSTTService(api_key=os.environ["DEEPGRAM_API_KEY"])
+
+    llm = GoogleLLMService(
+        model="gemini-2.0-flash",
+        api_key=os.environ["GOOGLE_API_KEY"],
     )
 
-    # Keep the agent alive until the call ends
-    await asyncio.Event().wait()
+    tts = DeepgramTTSService(
+        api_key=os.environ["DEEPGRAM_API_KEY"],
+        voice="aura-asteria-en",
+    )
+
+    beat_injector = BeatInjector(sample_rate=16000, tone_ms=200, gap_ms=250)
+
+    # --- LLM context + tool definition ---
+    place_order_tool = FunctionSchema(
+        name="place_order",
+        description=(
+            "Place a food order or table reservation with a restaurant agent "
+            "by resolving its ENS name, paying toll, and negotiating via AXL."
+        ),
+        properties={
+            "date":        {"type": "string",  "description": "Booking date, e.g. 'Friday'"},
+            "party_size":  {"type": "integer", "description": "Number of people"},
+            "max_deposit": {"type": "string",  "description": "Max deposit in USD, e.g. '25'"},
+        },
+        required=["date", "party_size", "max_deposit"],
+    )
+    tools = ToolsSchema(standard_tools=[place_order_tool])
+
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    context = OpenAILLMContext(messages, tools=tools)
+    context_aggregator = llm.create_context_aggregator(context)
+
+    class _BeatAudioEmitter:
+        """Bridges negotiation.py's audio_emitter events to BeatInjector beats."""
+        def __init__(self, injector: BeatInjector):
+            self._injector = injector
+
+        async def aemit(self, event: str, data=None) -> None:
+            data = data or {}
+            if event == "ens_resolving":
+                await self._injector.play_text_as_beats("resolving ENS", direction="out")
+            elif event == "toll_paying":
+                await self._injector.play_text_as_beats("paying toll", direction="out")
+            elif event == "handshake_sweep":
+                await self._injector.play_text_as_beats("connecting", direction="out")
+            elif event == "chirp":
+                msg_type = data.get("msg_type", "MESSAGE")
+                direction = "in" if msg_type in ("ACCEPT", "COUNTER") else "out"
+                await self._injector.play_text_as_beats(msg_type, direction=direction)
+            elif event == "settlement_executing":
+                await self._injector.play_text_as_beats("settling payment", direction="out")
+            elif event == "settlement_done":
+                await self._injector.play_text_as_beats("done", direction="in")
+
+    # --- Tool handler ---
+    async def handle_place_order(
+        function_name, tool_call_id, arguments, llm, context, result_callback
+    ):
+        date        = arguments.get("date", "Friday")
+        party_size  = int(arguments.get("party_size", 4))
+        max_deposit = str(arguments.get("max_deposit", "25"))
+
+        logger.info("place_order tool: date=%s party=%d deposit=%s", date, party_size, max_deposit)
+
+        emitter = _BeatAudioEmitter(beat_injector)
+        result = await run_negotiation(
+            callee_ens="bella.eth",
+            booking_date=date,
+            party_size=party_size,
+            max_deposit=max_deposit,
+            caller_wallet=os.environ.get("CALLER_WALLET", "0x0000"),
+            caller_ens=os.environ.get("CALLER_ENS", "alex.eth"),
+            audio_emitter=emitter,
+        )
+
+        if not result.success:
+            await result_callback({"error": result.error})
+            return
+
+        await result_callback({
+            "slot_id":        result.slot_id,
+            "deposit_amount": result.deposit_amount,
+            "terms_hash":     result.terms_hash,
+        })
+
+    llm.register_function("place_order", handle_place_order)
+
+    # --- Pipeline ---
+    pipeline = Pipeline([
+        transport.input(),
+        stt,
+        context_aggregator.user(),
+        llm,
+        tts,
+        beat_injector,
+        transport.output(),
+        context_aggregator.assistant(),
+    ])
+
+    task = PipelineTask(pipeline, params=PipelineParams(allow_interruptions=True))
+
+    @transport.event_handler("on_first_participant_joined")
+    async def on_first_participant_joined(transport, participant):
+        await transport.capture_participant_audio(participant["id"])
+        await asyncio.sleep(1)
+        await task.queue_frames([TTSSpeakFrame(OPENING_LINE)])
+
+    runner = PipelineRunner()
+    await runner.run(task)
 
 
 if __name__ == "__main__":
-    from livekit.agents import WorkerOptions, cli
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, worker_type="room"))
+    asyncio.run(main())

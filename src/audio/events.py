@@ -81,3 +81,8 @@ class AudioEventEmitter:
         logger.info("Audio event server listening on ws://%s:%d", host, port)
         async with websockets.serve(_ws_handler, host, port):
             await asyncio.Future()  # run forever
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+    asyncio.run(AudioEventEmitter.serve())

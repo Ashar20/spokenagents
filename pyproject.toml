@@ -3,9 +3,10 @@ name = "tollgate"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "livekit-agents[openai]>=0.8",
+    "pipecat-ai[daily,google,deepgram,silero]==0.0.85",
+    "livekit-agents[openai,silero]>=0.8",
+    "aiohttp>=3.9",
     "web3>=6.0",
-    "eth-ens-namehash>=2.0",
     "httpx>=0.27",
     "websockets>=12",
     "python-dotenv>=1.0",
