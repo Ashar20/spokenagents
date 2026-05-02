@@ -33,3 +33,6 @@ venv/
 .vscode/
 *.swp
 *.swo
+
+# Claude skills (local only)
+.claude/skills/
