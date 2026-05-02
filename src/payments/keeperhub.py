@@ -56,13 +56,15 @@ class KeeperHubClient:
             raise ValueError("KEEPERHUB_API_KEY env var or api_key argument required")
         self.mcp_url = mcp_url or os.environ.get(
             "KEEPERHUB_MCP_URL", "https://app.keeperhub.com/mcp")
+        # KH's MCP server requires the client to advertise text/event-stream
+        # per the MCP HTTP transport spec, even for sync tool calls.
+        # _parse_response (C4) handles both JSON and SSE-framed bodies.
         self._client = httpx.AsyncClient(
             timeout=120,
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                # Synchronous tool calls only — drop SSE so r.json() always works (C4)
-                "Accept": "application/json",
+                "Accept": "application/json, text/event-stream",
             },
         )
         self._sid: str | None = None
@@ -99,6 +101,22 @@ class KeeperHubClient:
             self._sid = sid
             self._initialized = True
 
+    @staticmethod
+    def _parse_response(response_text: str, content_type: str) -> dict:
+        """C4: handle both application/json and text/event-stream bodies.
+        SSE bodies look like:  event: message\\ndata: {"jsonrpc":...}\\n\\n
+        We pull the last `data:` line and parse it as JSON.
+        """
+        if "event-stream" in content_type:
+            data_lines = [
+                line[5:].strip() for line in response_text.splitlines()
+                if line.startswith("data:")
+            ]
+            if not data_lines:
+                raise RuntimeError(f"MCP SSE response had no data line: {response_text[:200]}")
+            return json.loads(data_lines[-1])
+        return json.loads(response_text)
+
     async def _call_tool(self, name: str, arguments: dict, *, rpc_id: int = 99) -> dict:
         await self._ensure_session()
         h = {"mcp-session-id": self._sid} if self._sid else {}
@@ -108,13 +126,12 @@ class KeeperHubClient:
         }, headers=h)
         r.raise_for_status()
         try:
-            body = r.json()
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"MCP non-JSON response: {r.text[:200]}") from exc
+            body = self._parse_response(r.text, r.headers.get("content-type", ""))
+        except (json.JSONDecodeError, RuntimeError) as exc:
+            raise RuntimeError(f"MCP unparseable response: {r.text[:300]}") from exc
         if "error" in body:
             raise RuntimeError(f"MCP error: {body['error']}")
-        # Defensive parsing (C3): every layer below result.content[0].text can
-        # be missing/empty/non-JSON depending on the tool's behavior.
+        # C3: every layer below result.content[0].text can be missing/empty/non-JSON.
         content = (body.get("result") or {}).get("content") or []
         if not content:
             return {}
@@ -140,35 +157,39 @@ class KeeperHubClient:
             "token_address": token_address,
         })
         exec_id = result.get("executionId") or result.get("execution_id")
-        status = result.get("status", "pending")
-        logger.info("KH execute_transfer: id=%s initial_status=%s", exec_id, status)
+        if not exec_id:
+            raise RuntimeError(f"KH execute_transfer returned no executionId: {result}")
+        logger.info("KH execute_transfer: id=%s initial_status=%s",
+                    exec_id, result.get("status", "pending"))
 
         # Always poll at least once: the initial response can return
         # status=completed without transactionHash.
         terminal = ("failed", "error", "cancelled")
+        successful = ("completed", "success")
         loop = asyncio.get_event_loop()
-        deadline = loop.time() + 60
+        timeout = float(os.environ.get("KH_TRANSFER_TIMEOUT_S", "60"))
+        deadline = loop.time() + timeout
+        status = "pending"
+        tx_hash = ""
+        sleep_s = 1.5
+
         while loop.time() < deadline:
             poll = await self._call_tool(
                 "get_direct_execution_status", {"execution_id": exec_id})
             result.update(poll)
             status = poll.get("status", status)
+            tx_hash = poll.get("transactionHash") or ""
             if status in terminal:
                 break
-            if status in ("completed", "success") and result.get("transactionHash"):
+            if status in successful and tx_hash:
                 break
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(sleep_s)
+            sleep_s = min(sleep_s * 1.5, 5.0)  # gentle backoff
 
-        tx_hash = result.get("transactionHash") or ""
         if status in terminal or not tx_hash:
-            raise RuntimeError(
-                f"KH transfer failed (status={status}): {result.get('error', result)}"
-            )
-        receipt = Receipt(
-            tx_hash=tx_hash,
-            signed_receipt=exec_id or "",
-            status="confirmed",
-        )
+            err = result.get("error") or f"no transactionHash after {timeout}s"
+            raise RuntimeError(f"KH transfer failed (status={status}): {err}")
+        receipt = Receipt(tx_hash=tx_hash, signed_receipt=exec_id, status="confirmed")
         logger.info("KH transfer confirmed: tx=%s", tx_hash)
         return receipt
 
@@ -197,11 +218,13 @@ class KeeperHubClient:
 
     async def execute_workflow(self, workflow_id: str, params: dict, audit_tag: str) -> Receipt:
         """Settlement — same direct transfer with the deposit amount."""
-        recipient = params.get("recipient", os.environ["BELLA_WALLET_ADDRESS"])
+        recipient = params.get("recipient") or os.environ.get("BELLA_WALLET_ADDRESS")
+        if not recipient:
+            raise ValueError("execute_workflow requires params['recipient'] or BELLA_WALLET_ADDRESS env var")
         amount = str(params["amount"])
         chain_id, token = self._chain_and_token()
         logger.info(
-            "KH execute_workflow (settlement): %s → %s tag=%s",
-            amount, recipient, audit_tag,
+            "KH execute_workflow (settlement): wf=%s %s → %s tag=%s",
+            workflow_id, amount, recipient, audit_tag,
         )
         return await self._direct_transfer(recipient, amount, chain_id, token)

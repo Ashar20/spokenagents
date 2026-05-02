@@ -59,22 +59,39 @@ def _parse_text_records(raw: dict[str, str]) -> AgentRecord:
 
 
 async def resolve_agent_records(ens_name: str, rpc_url: str | None = None) -> AgentRecord:
+    """Resolve agent text records from the configured chain's ENS.
+
+    Raises:
+        ValueError: no RPC configured
+        ConnectionError: RPC is unreachable (chain id probe failed)
+        LookupError: ENS reachable but the name has no records we recognize
+    """
+    import asyncio
+
     from web3 import AsyncWeb3
+    from web3.exceptions import Web3Exception
 
     url = rpc_url or os.environ.get("RPC_URL")
     if not url:
         raise ValueError("rpc_url argument or RPC_URL env var required")
+    name = ens_name.lower()
     w3 = AsyncWeb3(AsyncWeb3.AsyncHTTPProvider(url))
 
-    raw: dict[str, str] = {}
-    for key in TEXT_KEY_MAP:
-        try:
-            value = await w3.ens.get_text(ens_name, key)
-            if value:
-                raw[key] = value
-        except Exception as exc:
-            logger.warning("ENS text lookup failed for %s[%s]: %s", ens_name, key, exc)
+    # Cheap reachability probe — distinguishes "RPC down" from "name has no records"
+    try:
+        await w3.eth.chain_id
+    except Exception as exc:
+        raise ConnectionError(f"ENS RPC unreachable at {url}: {exc}") from exc
 
+    async def _safe_get_text(key: str) -> tuple[str, str | None]:
+        try:
+            return key, await w3.ens.get_text(name, key)
+        except Web3Exception as exc:
+            logger.warning("ENS text lookup failed for %s[%s]: %s", name, key, exc)
+            return key, None
+
+    results = await asyncio.gather(*[_safe_get_text(k) for k in TEXT_KEY_MAP])
+    raw = {k: v for k, v in results if v}
     if not raw:
-        raise LookupError(f"No ENS text records found for {ens_name}")
+        raise LookupError(f"No ENS text records found for {name}")
     return _parse_text_records(raw)
