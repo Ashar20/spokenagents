@@ -70,6 +70,16 @@ export function TracePanel({ wsUrl }: { wsUrl: string }) {
             },
           ]);
 
+          window.dispatchEvent(new CustomEvent("tollgate:event", { detail: data }));
+
+          if (data.msg_type) {
+            window.dispatchEvent(
+              new CustomEvent("tollgate:event", {
+                detail: { ...data, event: data.msg_type },
+              }),
+            );
+          }
+
           await handleAudioEvent(eventType, data);
         } catch {
           // ignore parse errors

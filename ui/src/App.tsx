@@ -1,4 +1,5 @@
 import { CallFrame } from "./CallFrame";
+import { PixelOffice } from "./PixelOffice";
 import { TracePanel } from "./TracePanel";
 
 const WS_URL = "ws://localhost:8765";
@@ -42,6 +43,19 @@ export default function App() {
 
       <div style={{ padding: "0 16px" }}>
         <CallFrame />
+      </div>
+
+      <div style={{ padding: "16px 24px 8px" }}>
+        <h2 style={{ margin: 0, fontSize: 15, fontWeight: 500, color: "#94A3B8" }}>
+          Pixel Office
+        </h2>
+        <p style={{ margin: "4px 0 0", fontSize: 13, color: "#475569" }}>
+          Alex and Bella animate as the negotiation runs.
+        </p>
+      </div>
+
+      <div style={{ padding: "8px 16px" }}>
+        <PixelOffice />
       </div>
 
       <div style={{ padding: "8px 24px" }}>
