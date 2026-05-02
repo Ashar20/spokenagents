@@ -20,20 +20,34 @@ _connected_clients: set = set()
 
 async def _ws_handler(websocket) -> None:
     _connected_clients.add(websocket)
-    logger.info("Demo UI connected (total: %d)", len(_connected_clients))
+    logger.info("Client connected (total: %d)", len(_connected_clients))
     try:
-        await websocket.wait_closed()
+        # Treat any client as both a listener and a potential emitter:
+        # the agent subprocess sends events here, browsers just listen.
+        async for raw_msg in websocket:
+            try:
+                payload = json.loads(raw_msg)
+                event_type = payload.get("event", "unknown")
+                data = {k: v for k, v in payload.items() if k != "event"}
+                await broadcast(event_type, data, exclude=websocket)
+            except Exception as exc:
+                logger.debug("Dropping malformed event: %s", exc)
+    except Exception:
+        pass
     finally:
         _connected_clients.discard(websocket)
-        logger.info("Demo UI disconnected (total: %d)", len(_connected_clients))
+        logger.info("Client disconnected (total: %d)", len(_connected_clients))
 
 
-async def broadcast(event_type: str, data: Optional[dict] = None) -> None:
+async def broadcast(event_type: str, data: Optional[dict] = None, exclude=None) -> None:
     if not _connected_clients:
         return
     payload = json.dumps({"event": event_type, **(data or {})})
+    targets = [ws for ws in list(_connected_clients) if ws is not exclude]
+    if not targets:
+        return
     await asyncio.gather(
-        *[ws.send(payload) for ws in list(_connected_clients)],
+        *[ws.send(payload) for ws in targets],
         return_exceptions=True,
     )
 

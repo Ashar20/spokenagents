@@ -71,6 +71,7 @@ async def main() -> None:
 
     from src.agents.beat_injector import BeatInjector
     from src.agents.negotiation import run_negotiation
+    from src.audio.events import AudioEventEmitter
 
     # --- Transport ---
     transport = DailyTransport(
@@ -132,13 +133,19 @@ async def main() -> None:
     }
 
     class _BeatAudioEmitter:
-        """Bridges negotiation events to live audio: spoken status + beats."""
-        def __init__(self, injector: BeatInjector, task: PipelineTask):
+        """Bridges negotiation events to live audio + the trace WS for the canvas."""
+        def __init__(self, injector: BeatInjector, task: PipelineTask, ws: AudioEventEmitter | None):
             self._injector = injector
             self._task = task
+            self._ws = ws
 
         async def aemit(self, event: str, data=None) -> None:
             data = data or {}
+            if self._ws:
+                try:
+                    await self._ws.aemit(event, data)
+                except Exception as exc:
+                    logger.debug("trace WS emit failed: %s", exc)
             text = _NARRATION.get(event)
             if text:
                 await self._task.queue_frames([TTSSpeakFrame(text)])
@@ -177,7 +184,14 @@ async def main() -> None:
         logger.info("place_order resolved to: caller_ens=%s callee_ens=%s wallet=%s",
                     caller_ens, callee_ens, caller_wallet)
 
-        emitter = _BeatAudioEmitter(beat_injector, task)
+        ws_emitter = AudioEventEmitter(os.environ.get("TRACE_WS_URL", "ws://localhost:8765"))
+        try:
+            await ws_emitter.connect()
+        except Exception as exc:
+            logger.warning("trace WS connect failed (canvas won't animate): %s", exc)
+            ws_emitter = None
+
+        emitter = _BeatAudioEmitter(beat_injector, task, ws_emitter)
         result = await run_negotiation(
             callee_ens=callee_ens,
             booking_date=date,
@@ -187,6 +201,12 @@ async def main() -> None:
             caller_ens=caller_ens,
             audio_emitter=emitter,
         )
+
+        if ws_emitter:
+            try:
+                await ws_emitter.close()
+            except Exception:
+                pass
 
         if not result.success:
             await result_callback({"error": result.error})

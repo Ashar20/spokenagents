@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from src.audio.events import AudioEventEmitter
 from src.ens import agent_registry
 from src.ens.registrar import register_subdomain
 
@@ -125,16 +126,20 @@ async def lifespan(app: FastAPI):
     if not DAILY_API_KEY:
         logger.warning("DAILY_API_KEY not set — /api/start-call will fail")
     await _reconcile_orphans()
+    ws_task = asyncio.create_task(AudioEventEmitter.serve())
+    logger.info("Trace WS server listening on ws://localhost:8765")
     sweep_task = asyncio.create_task(_sweep_stale_sessions())
     try:
         yield
     finally:
-        sweep_task.cancel()
-        try:
-            await sweep_task
-        except asyncio.CancelledError:
-            pass
-        # Drain anything still alive at shutdown
+        for task in (sweep_task, ws_task):
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        # Drain anything still alive at shutdown — uses _terminate_session
+        # so the Daily room is deleted (not just the process killed).
         for call_id in list(_sessions.keys()):
             await _terminate_session(call_id, "server shutdown")
 
