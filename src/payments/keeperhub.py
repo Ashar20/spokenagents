@@ -11,6 +11,7 @@ We poll `get_direct_execution_status` until it terminates and convert
 the result into a `Receipt`.
 """
 import asyncio
+import json
 import logging
 import os
 from dataclasses import dataclass
@@ -24,11 +25,23 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TollPaymentRequest:
-    workflow_id: str   # kept for backward-compat with negotiation.py; unused for direct transfer
-    amount: str        # e.g. "0.25" — human-readable USDC units
-    currency: str      # "USDC"
-    from_wallet: str   # caller's wallet address (for audit only; KH signs from its integration)
-    caller_ens: str    # for audit only
+    """PRD-shape payment request.
+
+    Mirrors the canonical pay_workflow signature:
+        keeperhub.pay_workflow(
+            workflow_id, amount, currency, from=alex_wallet,
+            metadata={purpose, caller_ens},
+        )
+    The `to_wallet` field is the receiving address resolved from the callee's
+    ENS contact.wallet text record. KH signs the actual transfer from its
+    own integration wallet (which must equal `from_wallet` for audit accuracy).
+    """
+    workflow_id: str          # KH workflow id (from contact.workflow ENS record)
+    amount: str               # human-readable USDC, e.g. "0.05"
+    currency: str             # "USDC"
+    from_wallet: str          # alex's wallet (PRD `from`)
+    to_wallet: str            # bella's receiving wallet (resolved from ENS)
+    metadata: dict            # PRD metadata: {purpose, caller_ens}
 
 
 # Defaults read from env so callers don't have to plumb them
@@ -48,20 +61,24 @@ class KeeperHubClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
+                # Synchronous tool calls only — drop SSE so r.json() always works (C4)
+                "Accept": "application/json",
             },
         )
         self._sid: str | None = None
+        # _initialized flips True only after BOTH initialize and the
+        # initialized notification complete, preventing C2 partial-init races.
+        self._initialized = False
         self._init_lock = asyncio.Lock()
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
     async def _ensure_session(self) -> None:
-        if self._sid:
+        if self._initialized:
             return
         async with self._init_lock:
-            if self._sid:
+            if self._initialized:
                 return
             r = await self._client.post(self.mcp_url, json={
                 "jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -72,10 +89,15 @@ class KeeperHubClient:
                 },
             })
             r.raise_for_status()
-            self._sid = r.headers.get("mcp-session-id")
+            sid = r.headers.get("mcp-session-id")
+            if not sid:
+                raise RuntimeError("MCP server returned no session id on initialize")
             await self._client.post(self.mcp_url, json={
                 "jsonrpc": "2.0", "method": "notifications/initialized",
-            }, headers={"mcp-session-id": self._sid} if self._sid else {})
+            }, headers={"mcp-session-id": sid})
+            # Publish session id only after both steps succeed (C2 fix)
+            self._sid = sid
+            self._initialized = True
 
     async def _call_tool(self, name: str, arguments: dict, *, rpc_id: int = 99) -> dict:
         await self._ensure_session()
@@ -85,12 +107,24 @@ class KeeperHubClient:
             "params": {"name": name, "arguments": arguments},
         }, headers=h)
         r.raise_for_status()
-        body = r.json()
+        try:
+            body = r.json()
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"MCP non-JSON response: {r.text[:200]}") from exc
         if "error" in body:
             raise RuntimeError(f"MCP error: {body['error']}")
-        text = body["result"]["content"][0]["text"]
-        import json
-        return json.loads(text)
+        # Defensive parsing (C3): every layer below result.content[0].text can
+        # be missing/empty/non-JSON depending on the tool's behavior.
+        content = (body.get("result") or {}).get("content") or []
+        if not content:
+            return {}
+        text = content[0].get("text", "") if isinstance(content[0], dict) else ""
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return {"_raw": text}
 
     async def _direct_transfer(
         self,
@@ -109,12 +143,12 @@ class KeeperHubClient:
         status = result.get("status", "pending")
         logger.info("KH execute_transfer: id=%s initial_status=%s", exec_id, status)
 
-        # Poll until we have a tx_hash or hit a terminal failure or timeout.
-        # The initial response can return status=completed without the hash,
-        # so we always poll at least once.
-        deadline = asyncio.get_event_loop().time() + 60
+        # Always poll at least once: the initial response can return
+        # status=completed without transactionHash.
         terminal = ("failed", "error", "cancelled")
-        while asyncio.get_event_loop().time() < deadline:
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + 60
+        while loop.time() < deadline:
             poll = await self._call_tool(
                 "get_direct_execution_status", {"execution_id": exec_id})
             result.update(poll)
@@ -138,27 +172,34 @@ class KeeperHubClient:
         logger.info("KH transfer confirmed: tx=%s", tx_hash)
         return receipt
 
-    async def pay_workflow(self, req: TollPaymentRequest) -> Receipt:
-        """
-        Pay the toll. The destination address is read from BELLA_WALLET_ADDRESS
-        env var; the chain and token from KH_CHAIN_ID + KH_TOKEN_ADDRESS
-        (defaulting to Sepolia USDC).
-        """
-        recipient = os.environ["BELLA_WALLET_ADDRESS"]
-        chain_id = os.environ.get("KH_CHAIN_ID", SEPOLIA_CHAIN_ID)
-        token = os.environ.get("KH_TOKEN_ADDRESS", USDC_SEPOLIA)
-        logger.info(
-            "KH pay_workflow (toll): %s %s → %s on chain %s",
-            req.amount, req.currency, recipient, chain_id,
+    @staticmethod
+    def _chain_and_token() -> tuple[str, str]:
+        return (
+            os.environ.get("KH_CHAIN_ID", SEPOLIA_CHAIN_ID),
+            os.environ.get("KH_TOKEN_ADDRESS", USDC_SEPOLIA),
         )
-        return await self._direct_transfer(recipient, req.amount, chain_id, token)
+
+    async def pay_workflow(self, req: TollPaymentRequest) -> Receipt:
+        """Pay the toll using the recipient resolved by the caller (typically
+        from the callee's ENS contact.wallet text record).
+
+        `req.metadata` is included for the audit trail (KH's `execute_transfer`
+        doesn't surface it on-chain, but it's preserved by the caller for
+        forwarding over AXL).
+        """
+        chain_id, token = self._chain_and_token()
+        logger.info(
+            "KH pay_workflow (toll): wf=%s %s %s from=%s → to=%s metadata=%s chain=%s",
+            req.workflow_id, req.amount, req.currency,
+            req.from_wallet, req.to_wallet, req.metadata, chain_id,
+        )
+        return await self._direct_transfer(req.to_wallet, req.amount, chain_id, token)
 
     async def execute_workflow(self, workflow_id: str, params: dict, audit_tag: str) -> Receipt:
         """Settlement — same direct transfer with the deposit amount."""
         recipient = params.get("recipient", os.environ["BELLA_WALLET_ADDRESS"])
         amount = str(params["amount"])
-        chain_id = os.environ.get("KH_CHAIN_ID", SEPOLIA_CHAIN_ID)
-        token = os.environ.get("KH_TOKEN_ADDRESS", USDC_SEPOLIA)
+        chain_id, token = self._chain_and_token()
         logger.info(
             "KH execute_workflow (settlement): %s → %s tag=%s",
             amount, recipient, audit_tag,
