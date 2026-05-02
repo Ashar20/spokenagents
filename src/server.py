@@ -30,7 +30,8 @@ logger = logging.getLogger("call_server")
 
 DAILY_API_KEY = os.environ.get("DAILY_API_KEY", "")
 DAILY_API_BASE = "https://api.daily.co/v1"
-ROOM_TTL_SECONDS = 60 * 60  # 1 hour
+ROOM_TTL_SECONDS = 30 * 60  # 30 min — Daily auto-deletes at this exp
+SWEEP_INTERVAL_SECONDS = 60  # how often to check for orphan sessions
 
 
 class CallSession(BaseModel):
@@ -42,19 +43,100 @@ class CallSession(BaseModel):
 _sessions: dict[str, dict] = {}
 
 
+async def _terminate_session(call_id: str, reason: str) -> None:
+    """Stop the agent process and delete the Daily room for one session."""
+    sess = _sessions.pop(call_id, None)
+    if not sess:
+        return
+    logger.info("Terminating call=%s (%s)", call_id, reason)
+
+    proc = sess.get("process")
+    if proc and proc.returncode is None:
+        proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            proc.kill()
+
+    try:
+        await _delete_daily_room(sess["room_name"])
+    except Exception as exc:
+        logger.warning("Room delete failed for %s: %s", sess["room_name"], exc)
+
+
+async def _sweep_stale_sessions() -> None:
+    """Background loop: terminate sessions whose room exceeded TTL,
+    whose Alex process exited, or whose human participant left."""
+    GRACE_PERIOD_S = 90  # let user join for 90s after spawn before checking presence
+    while True:
+        try:
+            await asyncio.sleep(SWEEP_INTERVAL_SECONDS)
+            now = time.time()
+            for call_id, sess in list(_sessions.items()):
+                age = now - sess.get("created_at", now)
+                proc = sess.get("process")
+                proc_dead = proc is not None and proc.returncode is not None
+
+                if age > ROOM_TTL_SECONDS:
+                    await _terminate_session(call_id, f"age={age:.0f}s exceeds 30 min TTL")
+                elif proc_dead:
+                    await _terminate_session(call_id, f"agent exited (code={proc.returncode})")
+                elif age > GRACE_PERIOD_S:
+                    if not await _room_has_human(sess["room_name"]):
+                        await _terminate_session(call_id, "no human participant")
+        except asyncio.CancelledError:
+            break
+        except Exception as exc:
+            logger.warning("Sweep iteration failed: %s", exc)
+
+
+async def _reconcile_orphans() -> None:
+    """On startup, wipe any tollgate-* Daily rooms left over from a previous
+    server process — _sessions in memory is empty, so we have no other way
+    to track them and they'd otherwise sit until their TTL expires."""
+    if not DAILY_API_KEY:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{DAILY_API_BASE}/rooms?limit=100",
+                headers={"Authorization": f"Bearer {DAILY_API_KEY}"},
+            )
+        if resp.status_code >= 300:
+            logger.warning("Reconcile: list rooms failed: %s", resp.status_code)
+            return
+        rooms = resp.json().get("data", [])
+        orphans = [r["name"] for r in rooms if r["name"].startswith("tollgate-")]
+        if not orphans:
+            return
+        logger.info("Reconcile: deleting %d orphan room(s) from previous run", len(orphans))
+        for name in orphans:
+            try:
+                await _delete_daily_room(name)
+                logger.info("  deleted orphan %s", name)
+            except Exception as exc:
+                logger.warning("  failed to delete %s: %s", name, exc)
+    except Exception as exc:
+        logger.warning("Reconcile failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not DAILY_API_KEY:
         logger.warning("DAILY_API_KEY not set — /api/start-call will fail")
-    yield
-    for call_id, sess in list(_sessions.items()):
-        proc = sess.get("process")
-        if proc and proc.returncode is None:
-            proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                proc.kill()
+    await _reconcile_orphans()
+    sweep_task = asyncio.create_task(_sweep_stale_sessions())
+    try:
+        yield
+    finally:
+        sweep_task.cancel()
+        try:
+            await sweep_task
+        except asyncio.CancelledError:
+            pass
+        # Drain anything still alive at shutdown
+        for call_id in list(_sessions.keys()):
+            await _terminate_session(call_id, "server shutdown")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -97,6 +179,26 @@ async def _delete_daily_room(name: str) -> None:
         )
 
 
+async def _room_has_human(name: str) -> bool:
+    """Returns True if there's at least one non-Alex participant in the room.
+    Alex's userName is "Alex (Caller)" (set in DailyTransport in caller.py)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{DAILY_API_BASE}/rooms/{name}/presence",
+                headers={"Authorization": f"Bearer {DAILY_API_KEY}"},
+            )
+        if resp.status_code == 404:
+            return False
+        if resp.status_code >= 300:
+            return True  # don't kill on transient API errors
+        data = resp.json().get("data", [])
+        return any(not (p.get("userName") or "").startswith("Alex") for p in data)
+    except Exception as exc:
+        logger.warning("presence check failed for %s: %s", name, exc)
+        return True  # err on the side of keeping the session alive
+
+
 async def _spawn_alex(room_url: str, call_id: str) -> tuple[asyncio.subprocess.Process, str]:
     env = os.environ.copy()
     env["DAILY_ROOM_URL"] = room_url
@@ -131,6 +233,7 @@ async def start_call():
         "room_name": room_name,
         "room_url": room_url,
         "log_path": log_path,
+        "created_at": time.time(),
     }
     logger.info("Spawned Alex agent (pid=%s) for call=%s, logs=%s", proc.pid, call_id, log_path)
 
@@ -143,25 +246,9 @@ class EndCallBody(BaseModel):
 
 @app.post("/api/end-call")
 async def end_call(body: EndCallBody):
-    sess = _sessions.pop(body.call_id, None)
-    if not sess:
+    if body.call_id not in _sessions:
         raise HTTPException(404, f"unknown call_id {body.call_id}")
-
-    proc = sess.get("process")
-    if proc and proc.returncode is None:
-        proc.terminate()
-        try:
-            await asyncio.wait_for(proc.wait(), timeout=5)
-        except asyncio.TimeoutError:
-            proc.kill()
-        logger.info("Terminated Alex agent for call=%s", body.call_id)
-
-    try:
-        await _delete_daily_room(sess["room_name"])
-        logger.info("Deleted room %s", sess["room_name"])
-    except Exception as exc:
-        logger.warning("Room delete failed: %s", exc)
-
+    await _terminate_session(body.call_id, "client requested end")
     return {"ended": True}
 
 
