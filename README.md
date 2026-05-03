@@ -10,6 +10,8 @@ Demo stack: **Alex** (caller) uses **Pipecat** with **Daily.co**, **Deepgram** S
 
 > Built for ETHGlobal Open Agents.
 
+- 📜 **Pitch:** [`project-idea.mdx`](./project-idea.mdx) · **Prize tracks:** [`prizes.md`](./prizes.md) · **Architecture:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) · **KeeperHub feedback:** [`FEEDBACK.md`](./FEEDBACK.md)
+
 ## Clone
 
 ```bash
