@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant U as User
+    participant A as Alex (caller.py)
+    participant N as negotiation.py
+    participant E as ENS
+    participant K as KeeperHub
+    participant X as AXL (Go bridge)
+    participant B as Bella (responder)
+
+    U->>A: "Order food from Bella"
+    A->>N: place_order tool
+    N->>E: resolve bella.spokenagents.eth
+    E-->>N: AgentRecord (wallet, toll, axl_node)
+    N->>K: execute_transfer (toll)
+    K-->>N: Receipt (tx_hash)
+    N->>X: POST /send  {PROPOSE + toll_receipt}
+    X->>B: relay PROPOSE
+    B->>B: check_toll(receipt)
+    B->>X: POST /send  {ACCEPT + slot_id}
+    X-->>N: GET /recv → ACCEPT
+    N->>X: POST /send  {CONFIRM}
+    X->>B: relay CONFIRM
+    N->>K: execute_workflow (settlement deposit)
+    K-->>N: Receipt (tx_hash)
+    N-->>A: NegotiationResult{success, slot_id}
+    A-->>U: "All set."
