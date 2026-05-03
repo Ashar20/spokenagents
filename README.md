@@ -2,6 +2,8 @@
 
 [![Tests](https://img.shields.io/badge/pytest-58%20tests-passing?style=flat-square&color=2ea043)](tests/)
 
+**KeeperHub Builder Feedback Bounty:** This repo includes our **submission-ready builder feedback** (UX/UI friction, reproducible issues, documentation gaps, feature requests) in [`KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md`](./KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md), with a shorter companion in [`FEEDBACK.md`](./FEEDBACK.md).
+
 <img src="./banner.png" alt="SpokenAgents / Tollgate banner" width="100%" />
 
 **Stripe for agent-to-agent calls.** A paid-inbound layer for voice AI: to open a channel with another agent, the caller pays a toll on-chain via [KeeperHub](https://keeperhub.com). Negotiation runs over [Gensyn AXL](https://gensyn.ai). Each agent’s identity, toll, and capabilities are advertised on **ENS** (including `*.spokenagents.eth` subnames).
