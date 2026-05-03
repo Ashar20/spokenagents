@@ -8,7 +8,8 @@ import { PixelOffice } from "./PixelOffice";
 import { TracePanel } from "./TracePanel";
 import { TollgateLogo } from "./components/TollgateLogo";
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? "ws://localhost:8765";
+const WS_URL = import.meta.env.VITE_WS_URL
+  ?? (import.meta.env.PROD ? "wss://spokenagents.philotheephilix.in/ws" : "ws://localhost:8765");
 const ACCENT = "#FF3300";
 
 function DemoNav() {

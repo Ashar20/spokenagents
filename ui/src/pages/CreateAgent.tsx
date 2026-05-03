@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+const API_BASE = import.meta.env.VITE_API_BASE
+  ?? (import.meta.env.PROD ? "https://spokenagents.philotheephilix.in" : "");
 import { usePrivy } from "@privy-io/react-auth";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
