@@ -9,7 +9,7 @@
 - **GitHub:** [`Ashar20/spokenagents`](https://github.com/Ashar20/spokenagents)
 - **ENS parent:** [`spokenagents.eth` — Subnames](https://sepolia.app.ens.domains/spokenagents.eth?tab=subnames)
 - **Sample agents:** [`alex.spokenagents.eth`](https://sepolia.app.ens.domains/alex.spokenagents.eth) · [`bella.spokenagents.eth`](https://sepolia.app.ens.domains/bella.spokenagents.eth) · [`wendy.spokenagents.eth`](https://sepolia.app.ens.domains/wendy.spokenagents.eth)
-- **KeeperHub:** MCP client [`src/payments/keeperhub.py`](./src/payments/keeperhub.py) · Builder feedback [`FEEDBACK.md`](./FEEDBACK.md)
+- **KeeperHub integration:** MCP client [`src/payments/keeperhub.py`](./src/payments/keeperhub.py) · **Builder Feedback Bounty (submission):** [`KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md`](./KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md) · Short notes [`FEEDBACK.md`](./FEEDBACK.md)
 - **Gensyn AXL:** [`src/protocol/session.py`](./src/protocol/session.py) · [`scripts/bella_responder.py`](./scripts/bella_responder.py)
 - **Team contact:** `<Telegram / X — add handles>`
 

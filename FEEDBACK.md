@@ -2,6 +2,8 @@
 
 > Submitted for the KeeperHub builder feedback bounty. All feedback is specific and actionable, based on building Tollgate — a paid-inbound channel primitive for AI agents.
 
+**Official bounty packet (copy/paste into submission forms):** [`KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md`](./KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md)
+
 ## Summary
 
 We built Tollgate: every agent-to-agent call requires the caller to pay a toll via KeeperHub x402 before the callee will open a negotiation channel. KeeperHub was the load-bearing payment rail — not decorative. Here is what we found.
@@ -9,17 +11,17 @@ We built Tollgate: every agent-to-agent call requires the caller to pay a toll v
 ## MCP Ergonomics
 
 **What worked well:**
-- The MCP server abstraction maps naturally onto agent tool-use patterns. Having `pay_workflow` as a named tool call felt idiomatic for LLM-driven agents.
-- The `workflow_id` concept (namespaced as `owner/name`) is clean and enables reusable payment primitives that other builders can adopt.
+- The MCP server abstraction maps naturally onto agent tool-use patterns. **`execute_transfer`** + **`get_direct_execution_status`** as MCP tools mapped cleanly onto our toll / settlement orchestrator (`KeeperHubClient` in [`src/payments/keeperhub.py`](./src/payments/keeperhub.py)).
+- **`executionId`** gives a durable handle for logs, retries, and correlating UI traces across ENS → toll → AXL steps.
 
 **Friction:**
-- **No dry-run / simulation mode.** When integrating, we had to either make real on-chain calls or mock everything. A `simulate: true` flag on `pay_workflow` that validates inputs and returns a mock receipt without touching the chain would have saved significant dev time.
+- **No dry-run / simulation mode.** When integrating, we had to either make real on-chain calls or mock everything. A `simulate: true` flag on transfer tools that validates inputs and returns a mock receipt without touching the chain would have saved significant dev time.
 - **No sandbox environment documented.** The docs don't mention a test API URL or faucet-compatible workflow. We had to discover this through trial and error.
 - **MCP tool parameter shapes aren't in the main docs.** The `/ai-tools` page describes the concept but not the exact JSON schema of each tool's input. We had to infer parameter names from the API docs and adapt.
 
 ## x402 Latency
 
-We observed the following during rehearsal (Base Sepolia):
+We observed the following during rehearsal (Ethereum Sepolia — chain id used by our default client config):
 - Cold toll payment (first call, no pre-funded channel): ~4-6s
 - Warm toll payment (subsequent calls): ~2-3s
 - Settlement execution: ~3-5s
@@ -31,24 +33,17 @@ This puts the "paid channel open" step at the edge of our 8s target. For product
 
 ## Reproducible Issues
 
-**Issue 1: Unclear error on missing workflow**
-When a `workflow_id` that doesn't exist is passed to `pay_workflow`, the API returns a 400 with a generic `"workflow not found"` message that doesn't indicate whether the issue is the namespace, the name, or the caller's permissions. A 404 with `{"error": "workflow_not_found", "workflow_id": "..."}` would be more useful.
+**Issue 1: `execute_transfer` can look “done” before `transactionHash` exists**
 
-**Steps to reproduce:**
-```python
-client = KeeperHubClient()
-await client.pay_workflow(TollPaymentRequest(
-    workflow_id="nonexistent/workflow",
-    amount="0.01",
-    currency="USDC",
-    from_wallet="0x...",
-    caller_ens="test.eth",
-))
-# Expected: 404 with structured error
-# Actual: 400 with {"message": "workflow not found"}
-```
+Our client polls **`get_direct_execution_status`** because the initial **`execute_transfer`** response sometimes reaches a completed-class **`status`** without a **`transactionHash`** yet. Stopping after the first response breaks any flow that gates on a chain receipt (for us: opening AXL after toll confirmation).
 
-**Issue 2: Receipt `status` field undocumented**
+See polling loop in [`src/payments/keeperhub.py`](./src/payments/keeperhub.py).
+
+**Issue 2: MCP responses alternate JSON vs SSE**
+
+The MCP HTTP endpoint may return **`application/json`** or **`text/event-stream`**. Clients must send **`Accept: application/json, text/event-stream`** and implement dual parsing (we parse the last SSE `data:` line in `_parse_response`). See [`tests/test_keeperhub.py`](./tests/test_keeperhub.py).
+
+**Issue 3: Receipt `status` field undocumented**
 The `status` field in the receipt response can be `"pending"`, `"confirmed"`, `"failed"`, or potentially others. The docs don't enumerate the possible values. We had to write `verify_receipt` defensively by only trusting `"confirmed"`.
 
 ## Documentation Gaps
@@ -61,7 +56,7 @@ The `status` field in the receipt response can be `"pending"`, `"confirmed"`, `"
 
 ## Feature Requests
 
-1. **`simulate: true` parameter on `pay_workflow`** — returns a mock confirmed receipt without executing a tx. Essential for test suites and CI.
+1. **`simulate: true` on MCP transfer tools** — returns a mock confirmed receipt without executing a tx. Essential for test suites and CI.
 
 2. **Channel-credit balance API** — pre-fund a credit that KeeperHub debits per call without on-chain tx. Document this pattern prominently for low-latency use cases.
 
