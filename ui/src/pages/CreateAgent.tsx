@@ -1,4 +1,6 @@
 import { useState } from "react";
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 import { usePrivy } from "@privy-io/react-auth";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -52,7 +54,7 @@ export default function CreateAgent() {
     const label = form.ensName.replace(/\.spokenagents\.eth$/, "").replace(/\.eth$/, "");
     const wallet = user?.wallet?.address ?? "";
     try {
-      const res = await fetch("/api/agents/register", {
+      const res = await fetch(`${API_BASE}/api/agents/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
