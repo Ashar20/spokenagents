@@ -28,9 +28,12 @@ export default function CreateAgent() {
     tollCurrency: "USDC",
     capabilities: [] as string[],
     workflowId: "",
+    axlNode: "",
+    axlBridgeUrl: "",
   });
   const [deploying, setDeploying] = useState(false);
   const [deployed, setDeployed] = useState(false);
+  const [deployError, setDeployError] = useState("");
 
   const toggleCapability = (id: string) => {
     setForm(f => ({
@@ -44,10 +47,36 @@ export default function CreateAgent() {
   const handleDeploy = async () => {
     if (!authenticated) { login(); return; }
     setDeploying(true);
-    // Simulate deployment
-    await new Promise(r => setTimeout(r, 2000));
-    setDeploying(false);
-    setDeployed(true);
+    setDeployError("");
+    // Strip any .eth / .spokenagents.eth suffix — API wants just the label
+    const label = form.ensName.replace(/\.spokenagents\.eth$/, "").replace(/\.eth$/, "");
+    const wallet = user?.wallet?.address ?? "";
+    try {
+      const res = await fetch("/api/agents/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label,
+          role: "callee",
+          axl_node: form.axlNode,
+          axl_bridge_url: form.axlBridgeUrl,
+          wallet,
+          toll_price: form.tollPrice,
+          currency: form.tollCurrency,
+          workflow_id: form.workflowId,
+          capabilities: form.capabilities,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail ?? "Registration failed");
+      }
+      setDeployed(true);
+    } catch (e: unknown) {
+      setDeployError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeploying(false);
+    }
   };
 
   return (
@@ -156,9 +185,32 @@ export default function CreateAgent() {
                 style={{ borderColor: "rgba(255,255,255,0.1)" }}
               />
             </div>
+            <div>
+              <label className="block text-xs font-mono tracking-widest uppercase text-white/40 mb-2">AXL Peer ID</label>
+              <input
+                type="text"
+                placeholder="64-char hex public key from your AXL node"
+                value={form.axlNode}
+                onChange={e => setForm(f => ({ ...f, axlNode: e.target.value }))}
+                className="w-full border rounded-xl px-5 py-4 text-white placeholder-white/20 outline-none text-xs bg-transparent font-mono"
+                style={{ borderColor: "rgba(255,255,255,0.1)" }}
+              />
+              <p className="text-xs text-white/25 mt-2 font-mono">Your AXL node's public key. Run <span style={{ color: ACCENT }}>./node -config ...</span> and copy "Our Public Key".</p>
+            </div>
+            <div>
+              <label className="block text-xs font-mono tracking-widest uppercase text-white/40 mb-2">AXL Bridge URL</label>
+              <input
+                type="text"
+                placeholder="http://127.0.0.1:9122"
+                value={form.axlBridgeUrl}
+                onChange={e => setForm(f => ({ ...f, axlBridgeUrl: e.target.value }))}
+                className="w-full border rounded-xl px-5 py-4 text-white placeholder-white/20 outline-none text-sm bg-transparent font-mono"
+                style={{ borderColor: "rgba(255,255,255,0.1)" }}
+              />
+            </div>
             <button
               onClick={() => setStep(2)}
-              disabled={!form.ensName || !form.displayName}
+              disabled={!form.ensName || !form.displayName || !form.axlNode || !form.axlBridgeUrl}
               className="w-full py-4 rounded-xl text-sm font-bold tracking-widest uppercase transition-colors disabled:opacity-30"
               style={{ background: ACCENT, color: "#000" }}
             >
@@ -332,6 +384,11 @@ export default function CreateAgent() {
               </div>
             )}
 
+            {deployError && (
+              <div className="border rounded-xl px-5 py-4 text-xs font-mono text-red-400" style={{ borderColor: "rgba(255,80,80,0.3)", background: "rgba(255,80,80,0.05)" }}>
+                {deployError}
+              </div>
+            )}
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="flex-1 py-4 rounded-xl text-sm font-bold tracking-widest uppercase border transition-colors" style={{ borderColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)" }}>
                 ← Back
@@ -384,7 +441,7 @@ export default function CreateAgent() {
                 Launch Demo
               </Link>
               <button
-                onClick={() => { setDeployed(false); setStep(1); setForm({ ensName: "", displayName: "", description: "", tollPrice: "0.25", tollCurrency: "USDC", capabilities: [], workflowId: "" }); }}
+                onClick={() => { setDeployed(false); setDeployError(""); setStep(1); setForm({ ensName: "", displayName: "", description: "", tollPrice: "0.25", tollCurrency: "USDC", capabilities: [], workflowId: "", axlNode: "", axlBridgeUrl: "" }); }}
                 className="px-8 py-3 text-sm font-bold tracking-widest uppercase border text-white/40 hover:text-white transition-colors"
                 style={{ borderColor: "rgba(255,255,255,0.1)" }}
               >

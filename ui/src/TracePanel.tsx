@@ -113,9 +113,9 @@ export function TracePanel({ wsUrl }: { wsUrl: string }) {
   }, [events]);
 
   return (
-    <div>
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Status bar */}
-      <div className="flex items-center gap-3 px-5 py-3 mb-4 rounded-2xl border border-white/10 bg-white/[0.02]">
+      <div className="flex items-center gap-3 px-5 py-3 mb-4 rounded-2xl border border-white/10 bg-white/[0.02] shrink-0">
         <div
           className="w-2 h-2 rounded-full shrink-0"
           style={{
@@ -132,8 +132,8 @@ export function TracePanel({ wsUrl }: { wsUrl: string }) {
         </span>
       </div>
 
-      {/* Event log */}
-      <div className="rounded-2xl border border-white/10 bg-black/40 p-5 font-mono text-sm max-h-[480px] overflow-y-auto">
+      {/* Event log — flex-1 + min-h-0 lets it fill remaining height without pushing outside */}
+      <div className="flex-1 min-h-0 rounded-2xl border border-white/10 bg-black/40 p-5 font-mono text-sm overflow-y-auto">
         {events.length === 0 ? (
           <div className="text-white/30 italic">
             No events yet. Start the agent call to see ENS → toll → AXL → settlement.
