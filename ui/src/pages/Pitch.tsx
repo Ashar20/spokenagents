@@ -522,18 +522,17 @@ const slides = [
       <div className="h-full flex flex-col gap-10">
         <h2 className="text-5xl md:text-7xl font-black leading-none tracking-tighter text-white"
           style={{ fontFamily: '"Butler", serif' }}>
-          Three tracks.<br /><span style={{ color: ACCENT }}>$17k exposure.</span>
+          Three tracks.<br /><span style={{ color: ACCENT }}>One coherent build.</span>
         </h2>
         <div className="grid grid-cols-3 gap-6">
           {[
-            { sponsor: "Gensyn", prize: "$5,000", color: "#00FF88", track: "Best Application of AXL", proof: "Two AXL nodes. Full PROPOSE→CONFIRM over AXL. No central broker." },
-            { sponsor: "KeeperHub", prize: "$4,750", color: ACCENT, track: "Best Use + Feedback Bounty", proof: "x402 toll + settlement workflows. Public inbound-toll workflow. FEEDBACK.md." },
-            { sponsor: "ENS", prize: "$5,000", color: "#5298FF", track: "Best Integration + Most Creative", proof: "contact.price as novel ENS pattern. Without ENS, there's no directory." },
+            { sponsor: "Gensyn", color: "#00FF88", track: "Best Application of AXL", proof: "Two AXL nodes. Full PROPOSE→CONFIRM over AXL. No central broker." },
+            { sponsor: "KeeperHub", color: ACCENT, track: "Best Use + Feedback Bounty", proof: "x402 toll + settlement workflows. Public inbound-toll workflow. FEEDBACK.md." },
+            { sponsor: "ENS", color: "#5298FF", track: "Best Integration + Most Creative", proof: "contact.price as novel ENS pattern. Without ENS, there's no directory." },
           ].map(p => (
             <div key={p.sponsor} className="border rounded-2xl p-7"
               style={{ borderColor: `${p.color}30`, background: `${p.color}08` }}>
-              <div className="text-4xl md:text-5xl font-black mb-2" style={{ fontFamily: '"Butler", serif', color: p.color }}>{p.prize}</div>
-              <div className="text-sm font-mono tracking-widest uppercase mb-4" style={{ color: `${p.color}` }}>{p.sponsor}</div>
+              <div className="text-3xl md:text-4xl font-black mb-4" style={{ fontFamily: '"Butler", serif', color: p.color }}>{p.sponsor}</div>
               <p className="text-white text-lg font-bold mb-3">{p.track}</p>
               <p className="text-white/55 text-sm leading-relaxed">{p.proof}</p>
             </div>
