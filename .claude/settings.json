@@ -9,7 +9,8 @@
       "Bash(pip install *)",
       "Bash(npm --version)",
       "Bash(.venv/bin/python -m pytest tests/test_toll_gate.py -v)",
-      "Bash(.venv/bin/python -m pytest tests/ -v)"
+      "Bash(.venv/bin/python -m pytest tests/ -v)",
+      "Bash(python -m pytest tests/ -q)"
     ]
   },
   "enabledPlugins": {

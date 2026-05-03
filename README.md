@@ -1,190 +1,246 @@
-# Tollgate
+# SpokenAgents (Tollgate)
 
-**Stripe for agent-to-agent calls.** A paid-inbound layer for AI agents: to open a communication channel with another agent, the caller's agent pays a toll. Payment executes on-chain via KeeperHub (x402). Negotiation happens over Gensyn's AXL. Each agent's identity, price, and capabilities are published on ENS.
+[![Tests](https://img.shields.io/badge/pytest-58%20tests-passing?style=flat-square&color=2ea043)](tests/)
 
-> Built for ETHGlobal Open Agents hackathon.
+**KeeperHub Builder Feedback Bounty:** This repo includes our **submission-ready builder feedback** (UX/UI friction, reproducible issues, documentation gaps, feature requests) in [`KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md`](./KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md), with a shorter companion in [`FEEDBACK.md`](./FEEDBACK.md).
 
-## The Problem
+<img src="./banner.png" alt="SpokenAgents / Tollgate banner" width="100%" />
 
-Every business is about to have a voice agent. The moment that's true, agent-to-agent spam becomes the next robocall crisis. Any agent can call any agent, for free, at arbitrary scale — and LLM-generated calls are cheaper to send than to listen to.
+**Stripe for agent-to-agent calls.** A paid-inbound layer for voice AI: to open a channel with another agent, the caller pays a toll on-chain via [KeeperHub](https://keeperhub.com). Negotiation runs over [Gensyn AXL](https://gensyn.ai). Each agent’s identity, toll, and capabilities are advertised on **ENS** (including `*.spokenagents.eth` subnames).
 
-There is currently no equivalent of postage, rate-limiting, or Stripe-for-agents to regulate inbound. We built it.
+Demo stack: **Alex** (caller) uses **Pipecat** with **Daily.co**, **Deepgram** STT/TTS, and **Google Gemini**; **Bella** (callee) is optional via **LiveKit Agents**. A small **FastAPI** control plane spawns the caller and exposes agent registry APIs.
 
-**One-line pitch:** *To reach an agent, another agent has to pay. We make the toll booth.*
+> Built for ETHGlobal Open Agents.
 
-## How It Works
+- 📜 **Pitch:** [`project-idea.mdx`](./project-idea.mdx) · **Prize tracks:** [`prizes.md`](./prizes.md) · **Architecture:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) · **KeeperHub bounty feedback:** [`KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md`](./KEEPERHUB_BUILDER_FEEDBACK_BOUNTY.md) · [`FEEDBACK.md`](./FEEDBACK.md)
 
-1. Alex tells his agent: *"Book me a table at Bella for Friday, party of 4."*
-2. Alex's agent resolves `bella.eth` via ENS → gets AXL node, toll price, KeeperHub workflow ID.
-3. Alex's agent calls Bella's agent over a LiveKit voice channel. Both agents detect they are agent-to-agent.
-4. Alex's agent pays the inbound toll via KeeperHub MCP. A modem-sweep audio cue plays.
-5. Both AXL nodes connect. Structured booking messages exchange: `PROPOSE → ACCEPT → CONFIRM`. R2-D2 chirps play.
-6. KeeperHub executes the final deposit. A settlement chime plays.
-7. Both agents summarize to their humans: *"Table held for Friday 8pm, $20 deposit, confirmation BELLA-FRI-8PM."*
+## Clone
 
-End-to-end in ~30 seconds.
+```bash
+git clone https://github.com/Ashar20/spokenagents.git
+cd spokenagents
+```
+
+## The problem
+
+Voice agents are becoming universal front doors. Without postage or pricing at the protocol edge, agent-to-agent spam scales like robocalls. This repo implements a **toll booth**: resolve a callee on ENS, pay a published toll, then negotiate over AXL before the human-level voice conversation proceeds.
+
+## How it works (high level)
+
+1. The human asks Alex’s agent to act (e.g. book at Bella).
+2. Alex resolves the callee’s ENS record → AXL bridge URL, toll **price**, KeeperHub **workflow** id, **wallet**, capabilities.
+3. Alex pays the inbound toll through KeeperHub; negotiation messages flow over **AXL** (`PROPOSE` → `ACCEPT` / `COUNTER` → `CONFIRM`), with optional beat sonification on the Daily audio path.
+4. On success, settlement can run via KeeperHub; both sides summarize for the human.
 
 ## Architecture
 
-```
-  Alex                                                   Bella
-   |                                                       |
-   |──voice──▶ [Alex's Agent] ◀───voice call───▶ [Bella's Agent] ◀──voice──|
-                    │                                  │
-                    │ ENS lookup: bella.eth            │
-                    ├──▶ [ENS]                         │
-                    │     axl.node, toll price,        │
-                    │     workflow id                  │
-                    │                                  │
-                    │ toll payment (x402)              │
-                    ├──▶ [KeeperHub MCP]               │
-                    │     USDC tx ───────────────────▶ │
-                    │                                  │
-                    │◀══════ AXL channel opens ═══════▶│
-                    │     PROPOSE / ACCEPT / CONFIRM   │
-                    │                                  │
-                    │ settlement                       │
-                    ├──▶ [KeeperHub MCP]               │
-                    │     deposit / escrow             │
-                    │                                  │
-```
+Rendered diagrams (from editable Mermaid sources):
 
-## Sponsor Integration
+| Flow | Source |
+|------|--------|
+| System overview | [`docs/architecture-flowchart.mmd`](docs/architecture-flowchart.mmd) |
+| Negotiation sequence | [`docs/architecture-sequence.mmd`](docs/architecture-sequence.mmd) |
+
+<p align="center">
+  <img src="./architecture-flowchart.png" alt="Architecture flowchart" width="90%" /><br/>
+  <sub>System flow — Pipecat/Daily caller, FastAPI, ENS, AXL, KeeperHub</sub>
+</p>
+
+<p align="center">
+  <img src="./architecture-sequence.png" alt="Sequence diagram" width="90%" /><br/>
+  <sub>ENS → toll → AXL → confirm → settlement</sub>
+</p>
+
+Long-form narrative and an alternate Mermaid embed live in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
+## What the code actually does
+
+| Piece | Role |
+|--------|------|
+| [`src/agents/caller.py`](src/agents/caller.py) | **Alex** — Pipecat pipeline: Daily transport, Deepgram STT/TTS, Gemini (`GoogleLLMService`), `place_order` tool → ENS + toll + AXL + audio events |
+| [`src/agents/callee.py`](src/agents/callee.py) | **Bella (optional)** — LiveKit Agents voice assistant (OpenAI stack); run when you want a separate LiveKit callee |
+| [`scripts/bella_responder.py`](scripts/bella_responder.py) | Headless **Bella AXL responder**: verifies toll receipt, role, responds over `AXLSession` |
+| [`src/server.py`](src/server.py) | **FastAPI** on `:8080`: Daily room creation, spawn Alex process, `POST /api/start-call`, `POST /api/end-call`, agent registry routes |
+| Lifespan | Starts **trace WebSocket** server on **`ws://localhost:8765`** via `AudioEventEmitter.serve()` for UI telemetry (chirps, ENS/toll events) |
+| Registry API | **`POST /api/agents/register`** — ENS subdomain + text records for labels under `spokenagents.eth`; **`GET /api/agents`** — list tracked agents (`?resolved=true` for full records) |
+
+Local agent names tracked for demos live in [`data/agents.json`](data/agents.json):
+
+- `alex.spokenagents.eth`
+- `bella.spokenagents.eth`
+- `wendy.spokenagents.eth`
+
+## Sponsor integrations
 
 ### Gensyn AXL
-- Two separate AXL nodes (one per agent) running the Go binary + HTTP bridge
-- All negotiation messages (`PROPOSE`, `COUNTER`, `ACCEPT`, `CONFIRM`) pass over AXL
-- Session lifecycle: connect on toll receipt → negotiate → close on confirm
-- See: `src/protocol/session.py`, `src/protocol/messages.py`
+
+- Go **AXL node** + HTTP bridge (`/topology`, `/send`, `/recv`).
+- Session client: [`src/protocol/session.py`](src/protocol/session.py); message types: [`src/protocol/messages.py`](src/protocol/messages.py).
+- Callee-side automation for toll + accept path: [`scripts/bella_responder.py`](scripts/bella_responder.py) (run beside the Bella bridge).
 
 ### KeeperHub
-- **Toll payment:** every inbound channel costs `contact.price` USDC, routed via `contact.workflow`
-- **Settlement:** after `CONFIRM`, KeeperHub executes the booking deposit
-- **Feedback bounty:** see `FEEDBACK.md` for specific, actionable integration feedback
-- See: `src/payments/keeperhub.py`, `src/payments/receipt.py`
+
+- Client: [`src/payments/keeperhub.py`](src/payments/keeperhub.py).
+- Talks to **`https://app.keeperhub.com/mcp`** with **JSON-RPC over HTTP**, `Authorization: Bearer <KEEPERHUB_API_KEY>`, `Accept: application/json, text/event-stream` (MCP/SSE-friendly).
+- Uses MCP tools such as **`execute_transfer`** and polls **`get_direct_execution_status`** until terminal state, then maps to [`Receipt`](src/payments/receipt.py).
+- `KeeperHubClient` manages MCP session **`initialize`** / **`initialized`** handshake under a lock to avoid partial init races.
+- Toll shape in code: [`TollPaymentRequest`](src/payments/keeperhub.py) (workflow id from ENS `contact.workflow`, wallets from records).
 
 ### ENS
-- Both agents have `.eth` names with 6 text records: `axl.node`, `contact.price`, `contact.currency`, `contact.workflow`, `capabilities`, `agent.version`
-- ENS is the directory — without it, there's no discoverable pricing or AXL node address
-- `contact.price` record is a novel pattern: ENS as a public pricing/capability advertisement
-- See: `src/ens/resolver.py`, `scripts/register_ens.py`
 
-## Project Structure
+- Resolution: [`src/ens/resolver.py`](src/ens/resolver.py) via `web3.py` and standard **Resolver.text** API.
+- On-chain registration for subnames: [`src/ens/registrar.py`](src/ens/registrar.py) — **registry** and **public resolver** addresses used in code:
+
+  - **ENS registry:** `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
+  - **Public resolver:** `0x8FADE66B79cC9f707aB26799354482EB93a5B7dD`
+
+  (Configure `RPC_URL` in `.env` for your chain; defaults in [`.env.example`](.env.example) point at Base Sepolia–compatible RPC for experiments.)
+
+- Text keys include `agent.role`, `axl.node`, `axl.bridge_url`, `contact.wallet`, `contact.price`, `contact.currency`, `contact.workflow`, `capabilities`, `agent.version`.
+
+## Project layout
 
 ```
-tollgate/
+spokenagents/
 ├── src/
+│   ├── server.py              # FastAPI + lifespan (trace WS :8765)
 │   ├── agents/
-│   │   ├── caller.py          # Alex's agent (LiveKit + OpenAI)
-│   │   ├── callee.py          # Bella's agent (LiveKit + OpenAI)
-│   │   └── negotiation.py     # ENS + toll + AXL integration flow
-│   ├── protocol/
-│   │   ├── messages.py        # AXL message schemas (PROPOSE/ACCEPT/CONFIRM)
-│   │   └── session.py         # AXL HTTP bridge client
-│   ├── payments/
-│   │   ├── keeperhub.py       # KeeperHub MCP client
-│   │   └── receipt.py         # Receipt verification
-│   ├── ens/
-│   │   └── resolver.py        # ENS text-record resolution
-│   └── audio/
-│       └── events.py          # WebSocket audio event server
-├── ui/                        # React demo UI (Vite + Tone.js)
-├── tests/                     # 29 passing unit tests
+│   │   ├── caller.py          # Pipecat + Daily + Deepgram + Gemini
+│   │   ├── callee.py          # LiveKit Agents (optional Bella)
+│   │   ├── negotiation.py     # ENS + KeeperHub + AXL flow
+│   │   └── beat_injector.py   # AXL beat sonification
+│   ├── protocol/              # AXL session + messages + toll gate
+│   ├── payments/              # keeperhub.py, receipt.py
+│   ├── ens/                   # resolver, registrar, agent_registry
+│   └── audio/events.py       # Trace WS + AudioEventEmitter
+├── ui/                        # Vite + React demo (Tone.js)
+├── tests/                     # 58 pytest tests
 ├── scripts/
-│   ├── register_ens.py        # ENS name registration helper
-│   ├── axl_smoke_test.py      # AXL node connectivity test
-│   └── keeperhub_smoke_test.py # KeeperHub payment test
-├── FEEDBACK.md                # KeeperHub builder feedback
-└── docs/plans/                # Implementation plan
+│   ├── bella_responder.py     # AXL responder for Bella
+│   ├── gen_brand_assets.py    # PNG banner/logo from SVG
+│   ├── register_ens.py
+│   └── keeperhub_smoke_test.py
+├── docs/
+│   ├── architecture-flowchart.mmd
+│   └── architecture-sequence.mmd
+└── data/agents.json           # tracked *.spokenagents.eth names
 ```
 
 ## Setup
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+ (for UI)
-- LiveKit Cloud account (free tier)
-- AXL node binary (built from https://github.com/gensyn-ai/axl)
-- KeeperHub API key (https://app.keeperhub.com)
+- Python **3.11+**
+- Node **18+** (for `ui/`)
+- API keys: **Daily**, **Deepgram**, **Google AI (Gemini)** for Alex; **KeeperHub**; optional **LiveKit** + **OpenAI** for Bella
+- Running **AXL** bridges for your dev topology
 
 ### Install
 
 ```bash
-git clone <repo>
-cd tollgate
 cp .env.example .env
-# Fill in .env (see .env.example for all required vars)
+# Fill .env — see comments in .env.example
 
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-pip install "livekit-agents[openai]>=0.8" aiohttp websockets
+pip install "livekit-agents[openai]>=0.8" aiohttp websockets  # if using callee.py
 
 cd ui && npm install && cd ..
 ```
 
-### Run Tests
+### Tests
 
 ```bash
-python -m pytest tests/ -v
-# 29 tests should pass
+source .venv/bin/activate
+pytest -q
 ```
 
-### Day-1 Checklist (before integration)
+**58** tests under `tests/` should pass.
 
-- [ ] Register ENS names: `python scripts/register_ens.py`
-- [ ] Start two AXL nodes: see `scripts/axl_smoke_test.py` for instructions
-- [ ] Test KeeperHub: `python scripts/keeperhub_smoke_test.py`
-- [ ] Test voice: start callee + caller in separate terminals
+### Run the demo (typical)
 
-### Run the Demo
+**1 — FastAPI + trace socket**
 
-Terminal 1 — AXL node (Bella):
 ```bash
-./axl/node -config config/bella-node.json -api-port 9012
+source .venv/bin/activate
+uvicorn src.server:app --port 8080
 ```
 
-Terminal 2 — AXL node (Alex):
+**2 — UI**
+
 ```bash
-./axl/node -config config/alex-node.json
+cd ui && npm run dev
+# http://localhost:5173
 ```
 
-Terminal 3 — Audio event server + Bella's voice agent:
+**3 — Start Alex after `/api/start-call` creates a room** (or run caller manually with `DAILY_ROOM_URL` set):
+
+```bash
+source .venv/bin/activate
+python -m src.agents.caller
+```
+
+**4 — AXL + Bella responder** (when exercising full negotiate path):
+
+```bash
+source .venv/bin/activate
+python -m scripts.bella_responder
+```
+
+**Optional — LiveKit Bella voice agent**
+
 ```bash
 source .venv/bin/activate
 python -m src.agents.callee dev
 ```
 
-Terminal 4 — Alex's voice agent:
+## API examples
+
+Health:
+
+```bash
+curl -sS http://localhost:8080/api/health
+```
+
+List registered agent names:
+
+```bash
+curl -sS "http://localhost:8080/api/agents"
+```
+
+Register a subname under `spokenagents.eth` (requires server env for owner key / RPC — see registrar):
+
+```bash
+curl -sS -X POST "http://localhost:8080/api/agents/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "label": "wendy",
+    "role": "callee",
+    "axl_node": "<64-char-hex>",
+    "axl_bridge_url": "http://127.0.0.1:9012",
+    "wallet": "0xYourWallet",
+    "toll_price": "0.05",
+    "workflow_id": "your/inbound-toll",
+    "capabilities": ["dining"]
+  }'
+```
+
+## Brand assets
+
+Regenerate **logo** and **banner** PNGs:
+
 ```bash
 source .venv/bin/activate
-python -m src.agents.caller dev
+python scripts/gen_brand_assets.py
 ```
 
-Terminal 5 — Demo UI:
-```bash
-cd ui && npm run dev
-# Open http://localhost:5173
-```
+## Team & links
 
-## Success Metrics
+| | |
+|--|--|
+| **Repo** | https://github.com/Ashar20/spokenagents.git |
+| **Docs** | [ARCHITECTURE.md](ARCHITECTURE.md) · Mermaid sources in `docs/` |
 
-| Metric | Target | Observed |
-|--------|--------|----------|
-| Paid channel open | ≤ 8s | TBD |
-| AXL negotiation | ≤ 5s | TBD |
-| End-to-end | ≤ 30s | TBD |
-| Payment reliability | ≥ 95% | TBD |
+## License
 
-## Team
-
-| Name | Role | Contact |
-|------|------|---------|
-| TBD | TBD | TBD |
-
-## Submission Links
-
-- Demo video: `<add link>`
-- Live demo: `<add link>`
-- Contract addresses: Base Sepolia — `<add addresses>`
-- ENS names: `alex-tollgate.eth`, `bella-tollgate.eth`
+See repository license file (if present) or project root metadata.
